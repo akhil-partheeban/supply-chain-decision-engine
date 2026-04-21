@@ -1,41 +1,67 @@
 """
-LangChain agent that answers supply chain questions by querying DuckDB.
+Claude-powered supply chain decision agent.
 
-The agent is given a DuckDB SQL tool and can introspect schemas,
-run analytical queries, and synthesize recommendations.
+Uses the Anthropic SDK directly with a manual tool loop.
+ask(question) → {"answer": str, "sql_used": list[str], "action_items": list[str]}
 """
 
+import json
 import os
 
+import anthropic
 import duckdb
 from dotenv import load_dotenv
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.tools import tool
-from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
 DB_PATH = os.getenv("DUCKDB_PATH", "data/duckdb/supply_chain.duckdb")
-MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+MODEL = "claude-sonnet-4-20250514"
 
 SYSTEM_PROMPT = """You are a supply chain analyst assistant with access to a DuckDB database
-containing Olist e-commerce data (bronze/silver/gold schemas), UN Comtrade trade flow data,
-and World Bank LPI scores.
+containing Olist e-commerce data.
 
-Use the run_sql tool to query the database and answer questions about:
-- Supplier performance and reliability
-- Delivery time analysis
-- Trade flow patterns
-- Logistics performance by country
+Gold-layer tables (query these first):
+  gold.gold_supplier_risk         — per-seller risk tier (HIGH/MEDIUM/LOW), late_delivery_rate, avg_review_score
+  gold.gold_concentration_risk    — per-state order share and concentration_flag
+  gold.gold_executive_summary     — single-row KPI rollup
+  gold.gold_supplier_performance  — per-seller revenue and freight metrics
 
-Always ground your answers in data. When you write SQL, prefer querying gold-layer tables first,
-then silver, then bronze only for raw exploration."""
+Silver-layer tables: silver.silver_orders, silver.silver_sellers
+
+Always query gold tables first, silver next, bronze only for raw exploration.
+Be concise and data-driven. End every response with 2-4 concrete action items prefixed with "ACTION:".
+"""
+
+TOOLS = [
+    {
+        "name": "run_sql",
+        "description": "Execute a read-only SQL query against the supply chain DuckDB database and return results as text.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The SQL query to execute.",
+                }
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "get_executive_summary",
+        "description": "Return the single-row executive KPI summary from gold.gold_executive_summary (overall late rate, % high-risk sellers, avg review score, total orders/sellers). Call this for any high-level health or summary question.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+]
 
 
-@tool
-def run_sql(query: str) -> str:
-    """Execute a read-only SQL query against the supply chain DuckDB database and return results as text."""
+# ── Tool implementations ───────────────────────────────────────────────────────
+
+def _run_sql(query: str) -> str:
     try:
         conn = duckdb.connect(DB_PATH, read_only=True)
         df = conn.execute(query).fetchdf()
@@ -47,39 +73,130 @@ def run_sql(query: str) -> str:
         return f"SQL error: {exc}"
 
 
-@tool
-def list_tables(schema: str = "gold") -> str:
-    """List all tables in a given schema (bronze, silver, or gold)."""
+def _get_executive_summary() -> str:
     try:
         conn = duckdb.connect(DB_PATH, read_only=True)
-        rows = conn.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = ?",
-            [schema],
-        ).fetchall()
+        df = conn.execute("SELECT * FROM gold.gold_executive_summary").fetchdf()
         conn.close()
-        return "\n".join(r[0] for r in rows) or f"No tables found in schema '{schema}'"
+        if df.empty:
+            return "Executive summary table is empty."
+        row = df.iloc[0]
+        return (
+            f"Total orders: {int(row['total_orders']):,}\n"
+            f"Total sellers: {int(row['total_sellers']):,}\n"
+            f"Overall late delivery rate: {row['overall_late_rate']:.1%}\n"
+            f"% high-risk sellers: {row['pct_high_risk_sellers']:.1%}\n"
+            f"Average review score: {row['avg_review_score']:.2f} / 5.00"
+        )
     except Exception as exc:
         return f"Error: {exc}"
 
 
-def build_agent() -> AgentExecutor:
-    llm = ChatOpenAI(model=MODEL, temperature=0)
-    tools = [run_sql, list_tables]
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", SYSTEM_PROMPT),
-            ("human", "{input}"),
-            MessagesPlaceholder("agent_scratchpad"),
-        ]
-    )
-    agent = create_openai_functions_agent(llm, tools, prompt)
-    return AgentExecutor(agent=agent, tools=tools, verbose=True, max_iterations=10)
+def _dispatch(tool_name: str, tool_input: dict) -> str:
+    if tool_name == "run_sql":
+        return _run_sql(tool_input["query"])
+    if tool_name == "get_executive_summary":
+        return _get_executive_summary()
+    return f"Unknown tool: {tool_name}"
 
+
+# ── Action-item extraction ─────────────────────────────────────────────────────
+
+def _extract_action_items(answer: str) -> list[str]:
+    """Pull ACTION: lines from the answer, or ask Claude to generate them."""
+    lines = [
+        line.strip().lstrip("•-").strip()
+        for line in answer.splitlines()
+        if line.strip().upper().startswith("ACTION:")
+    ]
+    items = [line[7:].strip() if line.upper().startswith("ACTION:") else line for line in lines]
+    if items:
+        return items[:4]
+
+    # Fallback: ask Claude to extract them
+    client = anthropic.Anthropic()
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=512,
+        system="Extract 2-4 concrete supply chain action items from the text. Return ONLY a JSON array of strings, no other text.",
+        messages=[{"role": "user", "content": answer}],
+    )
+    try:
+        text = resp.content[0].text.strip()
+        if text.startswith("["):
+            return json.loads(text)
+    except Exception:
+        pass
+    return ["Review findings and prioritize remediation steps."]
+
+
+# ── Main agent loop ────────────────────────────────────────────────────────────
+
+def ask(question: str) -> dict:
+    """
+    Ask a natural-language supply chain question.
+
+    Returns:
+        {
+            "answer": str,
+            "sql_used": list[str],
+            "action_items": list[str],
+        }
+    """
+    client = anthropic.Anthropic()
+    messages = [{"role": "user", "content": question}]
+    sql_used: list[str] = []
+
+    while True:
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=4096,
+            system=SYSTEM_PROMPT,
+            tools=TOOLS,
+            messages=messages,
+        )
+
+        # Append assistant turn
+        messages.append({"role": "assistant", "content": response.content})
+
+        if response.stop_reason == "end_turn":
+            break
+
+        if response.stop_reason == "tool_use":
+            tool_results = []
+            for block in response.content:
+                if block.type != "tool_use":
+                    continue
+                if block.name == "run_sql":
+                    sql_used.append(block.input.get("query", ""))
+                result = _dispatch(block.name, block.input)
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result,
+                })
+            messages.append({"role": "user", "content": tool_results})
+        else:
+            break  # unexpected stop_reason — bail out
+
+    # Extract final text answer
+    answer = next(
+        (block.text for block in response.content if hasattr(block, "text")),
+        "",
+    )
+    action_items = _extract_action_items(answer)
+
+    return {
+        "answer": answer,
+        "sql_used": sql_used,
+        "action_items": action_items,
+    }
+
+
+# ── Legacy async shim used by api/routers/decisions.py ────────────────────────
 
 async def run_decision_agent(question: str, context: dict = {}) -> str:
-    executor = build_agent()
     full_input = question
     if context:
         full_input += f"\n\nAdditional context: {context}"
-    result = await executor.ainvoke({"input": full_input})
-    return result.get("output", "")
+    return ask(full_input)["answer"]
