@@ -1,0 +1,7 @@
+supply_chain:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', '../data/duckdb/supply_chain.duckdb') }}"
+      threads: 4

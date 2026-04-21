@@ -1,0 +1,43 @@
+# Environment
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# DuckDB databases (keep schema, not data files)
+data/duckdb/*.duckdb
+data/duckdb/*.duckdb.wal
+
+# Raw data (large CSVs — download separately)
+data/raw/
+data/exports/
+
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Docker
+docker/volumes/
+
+# Streamlit
+.streamlit/secrets.toml
