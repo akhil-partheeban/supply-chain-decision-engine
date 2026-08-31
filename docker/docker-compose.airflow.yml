@@ -1,0 +1,87 @@
+# Self-hosted Airflow (LocalExecutor + Postgres metadata DB) running
+# dags/comtrade_weekly_dag.py. Separate from docker-compose.yml (API + dashboard) —
+# Airflow is a genuinely distinct concern with its own base image, metadata
+# database, and multi-process architecture (scheduler + API server), not something
+# that belongs bolted onto the API/dashboard compose file.
+#
+# NOT validated with `docker compose up` — no Docker was available in the
+# environment this was built in (same disclosed limitation as docker-compose.yml in
+# Phase 3). What WAS validated: dags/comtrade_weekly_dag.py's actual task logic, by
+# installing Airflow 3.3.0 directly and running `airflow tasks test` for both tasks
+# against the real Comtrade API and a real `dbt build` — see DECISIONS.md, Phase 6,
+# for exactly what that proved and what it doesn't (the compose packaging around
+# it is unverified; the DAG's own code is not).
+#
+# Usage:
+#   cd docker && docker compose -f docker-compose.airflow.yml up --build
+#   Then: http://localhost:8080 (default admin/admin, set via airflow-init below)
+
+version: "3.9"
+
+x-airflow-common: &airflow-common
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile.airflow
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    # Points the DAG's ingestion/dbt calls at the same DuckDB file the rest of this
+    # project's local setup uses (bind-mounted below) — the weekly pull and a
+    # `dbt build` run from a laptop see the exact same data.
+    DUCKDB_PATH: /opt/airflow/data/duckdb/supply_chain.duckdb
+  volumes:
+    - ../dags:/opt/airflow/dags
+    - ../data:/opt/airflow/data
+    - airflow_logs:/opt/airflow/logs
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username admin --password admin \
+          --firstname Admin --lastname User \
+          --role Admin --email admin@example.com || true
+
+  airflow-api-server:
+    <<: *airflow-common
+    # `airflow api-server` is Airflow 3.x's renamed webserver command (serves the
+    # UI + REST API on one process); use `airflow webserver` here instead if
+    # deploying this compose file against an Airflow 2.x image.
+    command: api-server
+    ports:
+      - "8080:8080"
+    depends_on:
+      - airflow-init
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      - airflow-init
+
+volumes:
+  postgres_data:
+  airflow_logs:

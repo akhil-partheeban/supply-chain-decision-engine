@@ -1,0 +1,17 @@
+# Extra dependencies installed on top of the official apache/airflow image
+# (see docker/Dockerfile.airflow) so dags/comtrade_weekly_dag.py's tasks can import
+# ingestion.comtrade_pipeline and run `dbt build` as a subprocess.
+#
+# Deliberately narrow — Airflow itself brings its own large, version-pinned
+# dependency tree (see the constraints file referenced in Dockerfile.airflow), and
+# adding anything beyond what this project's own ingestion/dbt code needs risks a
+# real conflict with Airflow's own pins. This project's tests (Phase 6) validated
+# the DAG's actual task logic against apache-airflow==3.3.0 with exactly this set of
+# extra packages installed on top — see DECISIONS.md.
+
+duckdb>=1.5.0
+pandas>=2.2.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+dbt-core>=1.11.0
+dbt-duckdb>=1.10.0

@@ -1,0 +1,311 @@
+partner_code,partner_desc,partner_iso3,is_group
+0,World,W00,True
+4,Afghanistan,AFG,False
+8,Albania,ALB,False
+10,Antarctica,ATA,False
+12,Algeria,DZA,False
+16,American Samoa,ASM,False
+20,Andorra,AND,False
+24,Angola,AGO,False
+28,Antigua and Barbuda,ATG,False
+31,Azerbaijan,AZE,False
+32,Argentina,ARG,False
+36,Australia,AUS,False
+40,Austria,AUT,False
+44,Bahamas,BHS,False
+48,Bahrain,BHR,False
+50,Bangladesh,BGD,False
+51,Armenia,ARM,False
+52,Barbados,BRB,False
+56,Belgium,BEL,False
+58,Belgium-Luxembourg (...1998),BEL,False
+60,Bermuda,BMU,False
+64,Bhutan,BTN,False
+68,Bolivia (Plurinational State of),BOL,False
+70,Bosnia Herzegovina,BIH,False
+72,Botswana,BWA,False
+74,Bouvet Island,BVT,False
+76,Brazil,BRA,False
+80,Br. Antarctic Terr.,ATB,False
+84,Belize,BLZ,False
+86,Br. Indian Ocean Terr.,IOT,False
+90,Solomon Isds,SLB,False
+92,Br. Virgin Isds,VGB,False
+96,Brunei Darussalam,BRN,False
+100,Bulgaria,BGR,False
+104,Myanmar,MMR,False
+108,Burundi,BDI,False
+112,Belarus,BLR,False
+116,Cambodia,KHM,False
+120,Cameroon,CMR,False
+124,Canada,CAN,False
+129,"Caribbean, nes",A49,False
+132,Cabo Verde,CPV,False
+136,Cayman Isds,CYM,False
+140,Central African Rep.,CAF,False
+144,Sri Lanka,LKA,False
+148,Chad,TCD,False
+152,Chile,CHL,False
+156,China,CHN,False
+158,"Taiwan, Province of China",TWN,False
+162,Christmas Isds,CXR,False
+166,Cocos Isds,CCK,False
+170,Colombia,COL,False
+174,Comoros,COM,False
+175,Mayotte (Overseas France),MYT,False
+178,Congo,COG,False
+180,Dem. Rep. of the Congo,COD,False
+184,Cook Isds,COK,False
+188,Costa Rica,CRI,False
+191,Croatia,HRV,False
+192,Cuba,CUB,False
+196,Cyprus,CYP,False
+200,Czechoslovakia (...1992),CSK,False
+203,Czechia,CZE,False
+204,Benin,BEN,False
+208,Denmark,DNK,False
+212,Dominica,DMA,False
+214,Dominican Rep.,DOM,False
+218,Ecuador,ECU,False
+221,"Eastern Europe, nes",E29,False
+222,El Salvador,SLV,False
+226,Equatorial Guinea,GNQ,False
+230,Ethiopia (...1992),ETH,False
+231,Ethiopia,ETH,False
+232,Eritrea,ERI,False
+233,Estonia,EST,False
+234,Faroe Isds,FRO,False
+238,Falkland Isds (Malvinas),FLK,False
+239,South Georgia and the South Sandwich Islands,SGS,False
+242,Fiji,FJI,False
+246,Finland,FIN,False
+248,Åland Islands ,ALA,False
+250,Metropolitan France,FRA,False
+251,France,FRA,False
+254,French Guiana (Overseas France),GUF,False
+258,French Polynesia,PYF,False
+260,Fr. South Antarctic Terr.,ATF,False
+262,Djibouti,DJI,False
+266,Gabon,GAB,False
+268,Georgia,GEO,False
+270,Gambia,GMB,False
+275,State of Palestine,PSE,False
+276,Germany,DEU,False
+278,Dem. Rep. of Germany (...1990),DDR,False
+280,Fed. Rep. of Germany (...1990),DEU,False
+288,Ghana,GHA,False
+290,"Northern Africa, nes",F49,False
+292,Gibraltar,GIB,False
+296,Kiribati,KIR,False
+300,Greece,GRC,False
+304,Greenland,GRL,False
+308,Grenada,GRD,False
+312,Guadeloupe (Overseas France),GLP,False
+316,Guam,GUM,False
+320,Guatemala,GTM,False
+324,Guinea,GIN,False
+328,Guyana,GUY,False
+332,Haiti,HTI,False
+334,Heard Island and McDonald Islands,HMD,False
+336,Holy See (Vatican City State),VAT,False
+340,Honduras,HND,False
+344,"China, Hong Kong SAR",HKG,False
+348,Hungary,HUN,False
+352,Iceland,ISL,False
+356,India (...1974),IND,False
+360,Indonesia,IDN,False
+364,Iran,IRN,False
+368,Iraq,IRQ,False
+372,Ireland,IRL,False
+376,Israel,ISR,False
+380,Italy,ITA,False
+384,Côte d'Ivoire,CIV,False
+388,Jamaica,JAM,False
+392,Japan,JPN,False
+398,Kazakhstan,KAZ,False
+400,Jordan,JOR,False
+404,Kenya,KEN,False
+408,Dem. People's Rep. of Korea,PRK,False
+410,Rep. of Korea,KOR,False
+412,Kosovo,_KS,False
+414,Kuwait,KWT,False
+417,Kyrgyzstan,KGZ,False
+418,Lao People's Dem. Rep.,LAO,False
+422,Lebanon,LBN,False
+426,Lesotho,LSO,False
+428,Latvia,LVA,False
+430,Liberia,LBR,False
+434,Libya,LBY,False
+438,Liechtenstein ,LIE,False
+440,Lithuania,LTU,False
+442,Luxembourg,LUX,False
+446,"China, Macao SAR",MAC,False
+450,Madagascar,MDG,False
+454,Malawi,MWI,False
+457,Sarawak,_SK,False
+458,Malaysia,MYS,False
+459,Peninsula Malaysia (...1963),_PM,False
+461,Sabah (...1963),_SH,False
+462,Maldives,MDV,False
+466,Mali,MLI,False
+470,Malta,MLT,False
+471,"CACM, nes",R91,False
+472,"Africa CAMEU region, nes",_AC,False
+473,"LAIA, nes",A79,False
+474,Martinique (Overseas France),MTQ,False
+478,Mauritania,MRT,False
+480,Mauritius,MUS,False
+484,Mexico,MEX,False
+488,Midway Islands,_MI,False
+490,"Other Asia, nes",S19,False
+492,"Europe EU, nes",MCO,False
+496,Mongolia,MNG,False
+498,Rep. of Moldova,MDA,False
+499,Montenegro,MNE,False
+500,Montserrat,MSR,False
+504,Morocco,MAR,False
+508,Mozambique,MOZ,False
+512,Oman,OMN,False
+516,Namibia,NAM,False
+520,Nauru,NRU,False
+524,Nepal,NPL,False
+527,"Oceania, nes",O19,False
+528,Netherlands,NLD,False
+530,Netherlands Antilles (...2010),ANT,False
+531,Curaçao,CUW,False
+532,Netherlands Antilles and Aruba (...1985),ANT,False
+533,Aruba,ABW,False
+534,Saint Maarten,SXM,False
+535,Bonaire,BES,False
+536,Neutral Zone,NTZ,False
+540,New Caledonia,NCL,False
+548,Vanuatu,VUT,False
+554,New Zealand,NZL,False
+558,Nicaragua,NIC,False
+562,Niger,NER,False
+566,Nigeria,NGA,False
+568,"Other Europe, nes",E19,False
+570,Niue,NIU,False
+574,Norfolk Isds,NFK,False
+577,"Other Africa, nes",F19,False
+578,"Norway, excluding Svalbard and Jan Mayen",NOR,False
+579,Norway,NOR,False
+580,N. Mariana Isds,MNP,False
+581,United States Minor Outlying Islands,UMI,False
+582,Pacific Isds (...1991),PCI,False
+583,FS Micronesia,FSM,False
+584,Marshall Isds,MHL,False
+585,Palau,PLW,False
+586,Pakistan,PAK,False
+588,East and West Pakistan (...1971),PAK,False
+590,"Panama, excl.Canal Zone (...1977)",PAN,False
+591,Panama,PAN,False
+592,Panama-Canal-Zone (...1977),PCZ,False
+598,Papua New Guinea,PNG,False
+600,Paraguay,PRY,False
+604,Peru,PER,False
+608,Philippines,PHL,False
+612,Pitcairn,PCN,False
+616,Poland,POL,False
+620,Portugal,PRT,False
+624,Guinea-Bissau,GNB,False
+626,Timor-Leste,TLS,False
+630,Puerto Rico ,PRI,False
+634,Qatar,QAT,False
+636,"Rest of America, nes",A79,False
+637,"North America and Central America, nes",A59,False
+638,Réunion (Overseas France),REU,False
+642,Romania,ROU,False
+643,Russian Federation,RUS,False
+646,Rwanda,RWA,False
+647,Ryukyu Isd,_RI,False
+652,Saint Barthélemy,BLM,False
+654,Saint Helena,SHN,False
+658,"Saint Kitts, Nevis and Anguilla (...1980)",KNA,False
+659,Saint Kitts and Nevis,KNA,False
+660,Anguilla,AIA,False
+662,Saint Lucia,LCA,False
+663,Saint Martin (French part) ,MAF,False
+666,Saint Pierre and Miquelon,SPM,False
+670,Saint Vincent and the Grenadines,VCT,False
+674,San Marino,SMR,False
+678,Sao Tome and Principe,STP,False
+682,Saudi Arabia,SAU,False
+686,Senegal,SEN,False
+688,Serbia,SRB,False
+690,Seychelles,SYC,False
+694,Sierra Leone,SLE,False
+697,"Europe EFTA, nes",R20,False
+698,"Sikkim, Protectorate of India (...1974)",_SM,False
+699,India,IND,False
+702,Singapore,SGP,False
+703,Slovakia,SVK,False
+704,Viet Nam,VNM,False
+705,Slovenia,SVN,False
+706,Somalia,SOM,False
+710,South Africa,ZAF,False
+711,Southern African Customs Union (...1999),ZA1,False
+716,Zimbabwe,ZWE,False
+717,Rhodesia Nyas (...1964),_RN,False
+720,Dem. Yemen (...1990),YMD,False
+724,Spain,ESP,False
+728,South Sudan,SSD,False
+729,Sudan,SDN,False
+732,Western Sahara,ESH,False
+736,Sudan (...2011),SDN,False
+740,Suriname,SUR,False
+744,Svalbard and Jan Mayen Islands ,SJM,False
+748,Eswatini,SWZ,False
+752,Sweden,SWE,False
+756,Switzerland ,CHE,False
+757,Switzerland,CHE,False
+760,Syria,SYR,False
+762,Tajikistan,TJK,False
+764,Thailand,THA,False
+768,Togo,TGO,False
+772,Tokelau,TKL,False
+776,Tonga,TON,False
+780,Trinidad and Tobago,TTO,False
+784,United Arab Emirates,ARE,False
+788,Tunisia,TUN,False
+792,Türkiye,TUR,False
+795,Turkmenistan,TKM,False
+796,Turks and Caicos Isds,TCA,False
+798,Tuvalu,TUV,False
+800,Uganda,UGA,False
+804,Ukraine,UKR,False
+807,North Macedonia,MKD,False
+810,USSR (...1990),SUN,False
+818,Egypt,EGY,False
+826,United Kingdom,GBR,False
+830,Channel Islands ,_CI,False
+831,Guernsey,GGY,False
+832,Jersey,JEY,False
+833,Isle of Man ,IMN,False
+834,United Rep. of Tanzania,TZA,False
+835,Tanganyika (...1964),_TK,False
+836,Zanzibar and Pemba Isd (...1964),_ZP,False
+837,Bunkers,X1 ,False
+838,Free Zones,X2 ,False
+839,Special Categories,XX ,False
+840,United States of America,USA,False
+841,USA and Puerto Rico (...1980),USA,False
+842,USA,USA,False
+849,US Misc. Pacific Isds,PUS,False
+850,US Virgin Isds (...1980),VIR,False
+854,Burkina Faso,BFA,False
+858,Uruguay,URY,False
+860,Uzbekistan,UZB,False
+862,Venezuela,VEN,False
+866,Dem. Rep. of Vietnam (...1974),VDR,False
+868,Rep. of Vietnam (...1974),VNM,False
+872,Wake Island,_WI,False
+876,Wallis and Futuna Isds,WLF,False
+879,"Western Asia, nes",F97,False
+882,Samoa,WSM,False
+886,Arab Rep. of Yemen (...1990),YEM,False
+887,Yemen,YEM,False
+890,Yugoslavia (...1991),YUG,False
+891,Serbia and Montenegro (...2005),SCG,False
+894,Zambia,ZMB,False
+899,"Areas, nes",_X ,False

@@ -4,10 +4,15 @@ services:
   api:
     build:
       context: ..
-      dockerfile: docker/Dockerfile
+      dockerfile: docker/Dockerfile.api
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
+      # Local-first by default: bind-mount data/ from the host so the container reads
+      # the same DuckDB file `dbt build` just produced, no S3 round-trip needed. Only
+      # set DUCKDB_S3_URI (see .env.example) to switch this container to the AWS
+      # cold-start path (docker/fetch_db.py) — unset, it's a complete no-op, so this
+      # compose file behaves exactly as it did before Phase 3.
       - ../data:/app/data
     env_file:
       - ../.env
@@ -16,8 +21,7 @@ services:
   dashboard:
     build:
       context: ..
-      dockerfile: docker/Dockerfile
-    command: streamlit run dashboard/app.py --server.port=8501 --server.address=0.0.0.0
+      dockerfile: docker/Dockerfile.dashboard
     ports:
       - "${STREAMLIT_PORT:-8501}:8501"
     volumes:

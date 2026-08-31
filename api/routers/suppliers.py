@@ -15,14 +15,14 @@ def get_conn() -> duckdb.DuckDBPyConnection:
 
 @router.get("/")
 def list_suppliers(limit: int = Query(50, le=500)):
-    """Return top suppliers ranked by avg review score."""
+    """Return top suppliers ranked by reliability score."""
     try:
         conn = get_conn()
         rows = conn.execute(
             f"""
             SELECT *
-            FROM gold.gold_supplier_performance
-            ORDER BY avg_review_score DESC NULLS LAST
+            FROM gold.gold_supplier_scorecard
+            ORDER BY reliability_score DESC NULLS LAST
             LIMIT {limit}
             """
         ).fetchdf()
@@ -37,7 +37,7 @@ def get_supplier(seller_id: str):
     try:
         conn = get_conn()
         row = conn.execute(
-            "SELECT * FROM gold.gold_supplier_performance WHERE seller_id = ?",
+            "SELECT * FROM gold.gold_supplier_scorecard WHERE seller_id = ?",
             [seller_id],
         ).fetchdf()
         conn.close()

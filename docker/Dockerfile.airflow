@@ -1,0 +1,23 @@
+# Self-hosted Airflow for dags/comtrade_weekly_dag.py. Built on the official image
+# (not a from-scratch install) — Airflow's own dependency graph is large and
+# version-sensitive enough that reinventing its base image is a well-known way to
+# end up with a broken install; extending the official image with exactly this
+# project's extra needs is the documented, supported pattern.
+#
+# 3.3.0 pinned deliberately: it's the version this project's DAG was actually
+# validated against (via `airflow tasks test`, executed for real — see
+# DECISIONS.md, Phase 6) because it's the first Airflow release with Python 3.13
+# wheels, which is what this project's own venv runs. Airflow 2.x is far more
+# common in production deployments today; the DAG itself uses only
+# airflow.decorators (not the 3.x-only airflow.sdk path) specifically so it also
+# runs unchanged on a 2.x deployment if that's what's available — see the DAG
+# file's own comment on this.
+FROM apache/airflow:3.3.0-python3.13
+
+COPY requirements-airflow.txt /requirements-airflow.txt
+RUN pip install --no-cache-dir -r /requirements-airflow.txt
+
+# The DAG imports `ingestion.comtrade_pipeline` and shells out to `dbt build`
+# against `dbt/` — both need the actual project code present, not just the DAG file.
+COPY ingestion/ /opt/airflow/ingestion/
+COPY dbt/ /opt/airflow/dbt/

@@ -1,0 +1,26 @@
+# FastAPI service image. Deliberately minimal (see requirements-api.txt) — this is
+# the same image deployed to both AWS App Runner (see aws/) and GCP Cloud Run (see
+# gcp/), unmodified between them: one image, one Dockerfile, two clouds.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements-api.txt .
+RUN pip install --no-cache-dir -r requirements-api.txt
+
+COPY api/ api/
+COPY agent/ agent/
+COPY docker/fetch_db.py .
+
+EXPOSE 8000
+
+# $PORT: Cloud Run injects this (default 8080) and requires the container to listen
+# on it; App Runner does not set it, so ${PORT:-8000} falls back to the fixed port
+# configured in aws/terraform/main.tf. Same image, same CMD, correct on both clouds
+# without an image-level branch.
+#
+# fetch_db.py pulls the current DuckDB snapshot from S3 if DUCKDB_S3_URI is set
+# (both cloud deployments use this — see gcp/README.md for why Cloud Run reads from
+# the same AWS-hosted S3 bucket rather than a separate GCS copy); it's a no-op
+# otherwise (local `docker compose up`, which bind-mounts data/ from the host).
+CMD ["sh", "-c", "python fetch_db.py && exec uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

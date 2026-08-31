@@ -1,5 +1,6 @@
 """
-Smoke-test for the LangChain/Claude decision agent.
+Smoke-test for the Claude decision agent (direct Anthropic SDK tool-calling loop —
+see agent/decision_agent.py; not LangChain, despite this test's former docstring).
 
 Runs three real questions against the gold layer and prints structured output.
 Requires ANTHROPIC_API_KEY in .env.

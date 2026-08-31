@@ -1,0 +1,110 @@
+version: 2
+
+models:
+  - name: gold_supplier_scorecard
+    description: One row per seller — volume, cost, delivery-reliability, and satisfaction metrics rolled into a composite reliability_score.
+    columns:
+      - name: seller_id
+        tests:
+          - unique
+          - not_null
+      - name: reliability_score
+        tests:
+          - not_null
+      - name: risk_tier
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["LOW", "MEDIUM", "HIGH"]
+
+  - name: gold_concentration_risk
+    description: One row per seller, ranked by revenue share, with HHI contribution.
+    columns:
+      - name: seller_id
+        tests:
+          - unique
+          - not_null
+      - name: revenue_share_pct
+        tests:
+          - not_null
+
+  - name: gold_geo_concentration
+    description: One row per seller state — revenue share and concentration flag.
+    columns:
+      - name: seller_state
+        tests:
+          - unique
+          - not_null
+
+  - name: gold_sourcing_cost_drivers
+    description: One row per product category (min 30 line items) — freight burden analysis.
+    columns:
+      - name: product_category
+        tests:
+          - unique
+          - not_null
+      - name: freight_burden_tier
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["LOW", "MEDIUM", "HIGH"]
+
+  - name: gold_executive_summary
+    description: Single-row portfolio rollup for the dashboard's top KPI strip.
+
+  - name: gold_country_logistics_scorecard
+    description: One row per country — World Bank LPI overall + sub-scores, pivoted wide, ranked within the countries actually loaded (not a global rank).
+    columns:
+      - name: country_code
+        tests:
+          - unique
+          - not_null
+      - name: lpi_overall
+        tests:
+          - not_null
+
+  - name: gold_trade_balance
+    description: One row per (reporter, period) — UN Comtrade import/export totals and trade balance.
+    columns:
+      - name: reporter_code
+        tests:
+          - not_null
+
+  - name: gold_macro_context
+    description: Single-row Brazil macro backdrop (World Bank LPI + Comtrade trade balance) paired with the Olist-derived supplier scorecards.
+
+  - name: gold_trade_concentration
+    description: One row per (reporter, commodity, flow, period, partner) — partner share, HHI contribution, and the group's overall HHI denormalized onto every row.
+    columns:
+      - name: group_hhi_interpretation
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["UNCONCENTRATED", "MODERATELY_CONCENTRATED", "HIGHLY_CONCENTRATED"]
+      - name: partner_share_pct
+        tests:
+          - not_null
+
+  - name: gold_trade_concentration_shift
+    description: Period-over-period change in partner share and group HHI. Empty until at least two periods have been pulled for a given (reporter, commodity, flow) — see the model's own header comment.
+    columns:
+      - name: partner_share_pct_change
+        tests:
+          - not_null
+
+  - name: gold_risk_score_validation
+    description: Out-of-sample backtest — risk_tier computed from pre-2018 orders, checked against actual 2018 late-delivery outcomes for the same sellers.
+    columns:
+      - name: training_risk_tier
+        tests:
+          - unique
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["LOW", "MEDIUM", "HIGH"]
+      - name: holdout_late_rate
+        tests:
+          - not_null

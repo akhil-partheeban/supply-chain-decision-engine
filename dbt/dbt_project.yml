@@ -22,3 +22,14 @@ models:
     gold:
       +materialized: table
       +schema: gold
+
+seeds:
+  supply_chain:
+    # Reference/lookup data (e.g. comtrade_partner_areas) lands alongside silver —
+    # it's cleaned, typed, static data consumed the same way a silver model is, just
+    # sourced from a CSV instead of a transform. Without an explicit +schema here,
+    # dbt falls back to generate_schema_name's default_schema (macros/
+    # generate_schema_name.sql), which is blank for this project's DuckDB profile
+    # (profiles.yml sets no top-level `schema:`) — models never hit this because
+    # they always set +schema explicitly, but seeds did until this was added.
+    +schema: silver

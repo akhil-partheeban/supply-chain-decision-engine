@@ -14,6 +14,7 @@ Usage:
 import argparse
 import logging
 import os
+import time
 from pathlib import Path
 
 import duckdb
@@ -75,16 +76,18 @@ def load_table(
         """
     )
     row_count: int = conn.execute(f"SELECT count(*) FROM {qualified}").fetchone()[0]
-    log.info("  %-55s → %s  (%,d rows)", csv_path.name, qualified, row_count)
+    log.info("  %-55s → %s  (%s rows)", csv_path.name, qualified, f"{row_count:,}")
     return row_count
 
 
 def load_all(raw_dir: Path, db_path: str) -> dict[str, int]:
+    started_at = time.monotonic()
     conn = connect(db_path)
     bootstrap_schema(conn)
 
     stats: dict[str, int] = {}
     missing: list[str] = []
+    input_bytes = 0
 
     for filename, table_name in OLIST_TABLES.items():
         csv_path = raw_dir / filename
@@ -92,12 +95,24 @@ def load_all(raw_dir: Path, db_path: str) -> dict[str, int]:
             log.warning("  Missing: %s — skipping", csv_path)
             missing.append(filename)
             continue
+        input_bytes += csv_path.stat().st_size
         stats[table_name] = load_table(conn, csv_path, table_name)
 
     conn.close()
 
+    elapsed = time.monotonic() - started_at
+    total_rows = sum(stats.values())
+    input_mb = input_bytes / (1024 * 1024)
+    throughput = total_rows / elapsed if elapsed > 0 else 0.0
+
+    # Numbers that matter for citing this pipeline outside the code (resume, standup,
+    # postmortem) — kept as one block so they're easy to grep out of a log file.
     log.info("")
     log.info("Bronze load complete: %d tables loaded, %d skipped.", len(stats), len(missing))
+    log.info(
+        "  Rows ingested: %s  |  Input volume: %.1f MB  |  Elapsed: %.2fs  |  Throughput: %s rows/sec",
+        f"{total_rows:,}", input_mb, elapsed, f"{throughput:,.0f}",
+    )
     if missing:
         log.warning("Missing files: %s", missing)
 

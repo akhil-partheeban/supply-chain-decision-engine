@@ -1,0 +1,65 @@
+version: 2
+
+models:
+  - name: silver_orders
+    description: One row per order_id — cleaned timestamps plus derived delivery flags.
+    columns:
+      - name: order_id
+        tests:
+          - unique
+          - not_null
+
+  - name: silver_order_items
+    description: One row per (order_id, order_item_id) — enriched with product category and weight.
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+
+  - name: silver_sellers
+    description: Seller dimension, one row per seller_id.
+    columns:
+      - name: seller_id
+        tests:
+          - unique
+          - not_null
+
+  - name: silver_comtrade_trade_flows
+    description: One row per (reporter, period, flow) — Comtrade grand totals only (motCode = '0'), mode-of-transport breakdown rows excluded.
+    columns:
+      - name: reporter_code
+        tests:
+          - not_null
+      - name: flow_type
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["import", "export"]
+
+  - name: silver_world_bank_lpi
+    description: One row per (country, indicator, year) — tidy/long LPI records.
+    columns:
+      - name: country_code
+        tests:
+          - not_null
+      - name: value
+        tests:
+          - not_null
+
+  - name: silver_comtrade_partner_flows
+    description: One row per (reporter, period, flow, commodity, partner country) — Comtrade partner-level breakdowns, aggregate/residual pseudo-partners (", nes", Bunkers, Free Zones, Special Categories) excluded.
+    columns:
+      - name: partner_code
+        tests:
+          - not_null
+      - name: partner_name
+        tests:
+          - not_null
+
+  - name: comtrade_partner_areas
+    description: "Seed: UN Comtrade's own partner-country reference data (pulled from https://comtradeapi.un.org/files/v1/app/reference/partnerAreas.json), not hand-typed."
+    columns:
+      - name: partner_code
+        tests:
+          - unique
+          - not_null

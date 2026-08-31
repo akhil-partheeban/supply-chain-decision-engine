@@ -21,12 +21,16 @@ SYSTEM_PROMPT = """You are a supply chain analyst assistant with access to a Duc
 containing Olist e-commerce data.
 
 Gold-layer tables (query these first):
-  gold.gold_supplier_risk         — per-seller risk tier (HIGH/MEDIUM/LOW), late_delivery_rate, avg_review_score
-  gold.gold_concentration_risk    — per-state order share and concentration_flag
-  gold.gold_executive_summary     — single-row KPI rollup
-  gold.gold_supplier_performance  — per-seller revenue and freight metrics
+  gold.gold_supplier_scorecard      — per-seller reliability_score, risk_tier (HIGH/MEDIUM/LOW),
+                                       delivery_days_stddev, late_delivery_rate, avg_review_score,
+                                       revenue, freight cost
+  gold.gold_concentration_risk      — per-seller revenue_share_pct, hhi_contribution, concentration_flag
+                                       (single-supplier dependency risk)
+  gold.gold_geo_concentration       — per-state revenue share and concentration_flag (geographic risk)
+  gold.gold_sourcing_cost_drivers   — per-product-category freight_pct_of_spend and freight_burden_tier
+  gold.gold_executive_summary       — single-row KPI rollup (includes hhi_index, hhi_interpretation)
 
-Silver-layer tables: silver.silver_orders, silver.silver_sellers
+Silver-layer tables: silver.silver_orders, silver.silver_order_items, silver.silver_sellers
 
 Always query gold tables first, silver next, bronze only for raw exploration.
 Be concise and data-driven. End every response with 2-4 concrete action items prefixed with "ACTION:".
@@ -83,10 +87,14 @@ def _get_executive_summary() -> str:
         row = df.iloc[0]
         return (
             f"Total orders: {int(row['total_orders']):,}\n"
-            f"Total sellers: {int(row['total_sellers']):,}\n"
+            f"Total suppliers scored: {int(row['total_suppliers']):,}\n"
+            f"Total revenue: ${row['total_revenue']:,.2f}\n"
             f"Overall late delivery rate: {row['overall_late_rate']:.1%}\n"
-            f"% high-risk sellers: {row['pct_high_risk_sellers']:.1%}\n"
-            f"Average review score: {row['avg_review_score']:.2f} / 5.00"
+            f"Average reliability score: {row['avg_reliability_score']:.1f} / 100\n"
+            f"% high-risk suppliers: {row['pct_high_risk_suppliers']:.1%}\n"
+            f"Average review score: {row['avg_review_score']:.2f} / 5.00\n"
+            f"Supplier concentration (HHI): {row['hhi_index']:.1f} ({row['hhi_interpretation']})\n"
+            f"Top-5 supplier revenue share: {row['top5_supplier_revenue_share_pct']:.1f}%"
         )
     except Exception as exc:
         return f"Error: {exc}"
@@ -193,10 +201,14 @@ def ask(question: str) -> dict:
     }
 
 
-# ── Legacy async shim used by api/routers/decisions.py ────────────────────────
+# ── Async shim used by api/routers/decisions.py ────────────────────────────────
 
-async def run_decision_agent(question: str, context: dict = {}) -> str:
+async def run_decision_agent(question: str, context: dict | None = None) -> dict:
+    """Returns the full {"answer", "sql_used", "action_items"} dict from ask() —
+    this used to discard everything except "answer", which meant action_items (the
+    whole point of the ACTION: extraction in _extract_action_items) never reached
+    the API response or the dashboard. See DECISIONS.md, Phase 4."""
     full_input = question
     if context:
         full_input += f"\n\nAdditional context: {context}"
-    return ask(full_input)["answer"]
+    return ask(full_input)
