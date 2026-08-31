@@ -281,10 +281,21 @@ def main() -> None:
             fetch_trade_flows(reporter=args.reporter, period=args.period, trade_flow=flow)
         )
 
-    row_count = load_bronze(conn, all_records)
+    # upsert_bronze(), not load_bronze(): this CLI's world-aggregate pull
+    # (cmdCode='TOTAL', partnerCode='0') writes to the SAME bronze.comtrade_trade_flows
+    # table that ingestion/comtrade_pipeline.py's partner-breakdown pull also writes
+    # to. load_bronze()'s DROP+CREATE full replace would silently wipe out every
+    # partner-breakdown row on every run of this CLI — which is exactly what
+    # happened in practice (the 'TOTAL'-commodity rows this CLI produces went
+    # missing after a later comtrade_pipeline run, not the other way around, but the
+    # collision is symmetric: whichever of the two runs LAST with load_bronze()
+    # destroys the other's data). upsert_bronze()'s natural key includes cmdCode, so
+    # 'TOTAL' rows never collide with the partner pipeline's '85'/'33'/'94' rows —
+    # both pulls' data now coexists safely regardless of run order.
+    result = upsert_bronze(conn, all_records, run_id=f"comtrade-cli-{args.period}")
     conn.close()
 
-    if row_count == 0:
+    if result["fetched"] == 0:
         log.warning(
             "Zero rows loaded — the free preview API caps results and covers only a "
             "limited recent window; try a different --period, or set a real "
