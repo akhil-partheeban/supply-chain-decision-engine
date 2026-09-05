@@ -1,0 +1,74 @@
+name: CI
+
+# Every push and every PR targeting main — exactly what's required. No path
+# filters: a change anywhere in the repo re-runs the full gate, since dbt models,
+# ingestion code, and the API are all interdependent enough that "only run on
+# changes to X" would be guessing at a dependency graph this project doesn't
+# formally declare.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: dbt + pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # requirements-dev.txt, not the root requirements.txt — deliberately. This
+      # repo has four requirements files for four different deploy targets (see
+      # DECISIONS.md, Phase 1, decision #10): root requirements.txt is intentionally
+      # slim for Streamlit Community Cloud and does not include dbt-core, dbt-duckdb,
+      # or pytest at all. Only requirements-dev.txt has what steps below need.
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      # dbt build needs a populated bronze layer to run against. The real Olist
+      # CSVs are gitignored (large, Kaggle-licensed, not committed) and the real
+      # UN Comtrade / World Bank API pulls are rate-limited and non-deterministic
+      # — neither is appropriate for a required, blocking CI gate that has to pass
+      # or fail based on code correctness, not on a flaky third-party API or a
+      # missing download. scripts/build_ci_fixture_db.py builds a small, fully
+      # synthetic bronze layer instead, covering every bronze source any dbt model
+      # actually references, with enough real variety (multiple risk tiers, a
+      # category that clears the cost-driver volume threshold and one that
+      # doesn't, two Comtrade periods) that the tests below are a genuine check of
+      # the SQL logic, not a vacuous pass against empty tables. See DECISIONS.md,
+      # "CI/CD," for the full reasoning.
+      - name: Build CI fixture database
+        run: python -m scripts.build_ci_fixture_db --db /tmp/ci_fixture.duckdb
+
+      - name: dbt build (models + data-quality tests)
+        working-directory: dbt
+        env:
+          DUCKDB_PATH: /tmp/ci_fixture.duckdb
+        run: dbt build
+
+      # test_agent.py is excluded deliberately, not silently: it's a live smoke
+      # test that calls the real Anthropic API and requires a real
+      # ANTHROPIC_API_KEY, which is not configured as a repository secret. Running
+      # it here would make CI fail on every run for a missing credential, not a
+      # code defect — the same reasoning already documented in this project's own
+      # README/CLAUDE.md for local test invocations.
+      - name: pytest
+        run: pytest tests/ --ignore=tests/test_agent.py -v
+
+  docker-build:
+    name: Docker build (API image)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Confirms the exact image deployed to AWS App Runner / GCP Cloud Run
+      # (docker/Dockerfile.api) still builds — catches a broken COPY path, a
+      # requirements-api.txt dependency conflict, etc. Does not push anywhere;
+      # this is a build-only correctness check, not a deploy step.
+      - name: Build API image
+        run: docker build -f docker/Dockerfile.api -t supply-chain-api:ci .
