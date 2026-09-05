@@ -2525,9 +2525,13 @@ verifiable by anyone who opens the same URL.
 
 ### 8. What this CI gate does not cover — stated plainly, matching this project's own standard for itself
 
-**`test_agent.py` has zero CI coverage, and that's a real gap in exactly the
-component that's the centerpiece of this project's "AI decision engine" framing.**
-It's excluded deliberately (a live smoke test against the real Anthropic API,
+**`test_agent.py` has zero CI coverage — the LLM decision agent
+(`agent/decision_agent.py`) is real code with no automated regression protection
+at all.** This is exactly why the README and this document's summary sections were
+updated (post-Phase-7) to stop presenting the agent as a proven, working part of
+the pipeline: unverified code with zero CI coverage doesn't belong in a "what this
+system does" headline, regardless of how central it was to the original framing.
+It's excluded from CI deliberately (a live smoke test against the real Anthropic API,
 requiring `ANTHROPIC_API_KEY` — not configured as a repository secret, and
 intentionally not added as one in this phase, since wiring a real LLM credential
 into a CI system that runs on every PR — including PRs from forks, which get a

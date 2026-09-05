@@ -1,6 +1,6 @@
 # Supply Chain Decision Engine
 
-An end-to-end analytics and AI decision platform for global supply chain analysis, built on a medallion lakehouse architecture using DuckDB.
+An end-to-end supply chain analytics platform — medallion lakehouse architecture on DuckDB, dbt transformations, and a FastAPI service — for global supply chain risk and trade-concentration analysis.
 
 > **Studying this project for an interview?** Read [`DECISIONS.md`](DECISIONS.md) —
 > it documents every non-obvious engineering choice (why this metric formula and not
@@ -41,11 +41,18 @@ DuckDB gold schema:
     gold_risk_score_validation       — out-of-sample backtest: does risk_tier predict future late deliveries?
     gold_executive_summary           — single-row portfolio KPI rollup
     ↓
-FastAPI  (/suppliers, /decisions/ask)
-Claude-powered decision agent  (agent/decision_agent.py — direct Anthropic SDK tool-calling loop)
-Streamlit dashboard  (charts direct from DuckDB; AI assistant widget calls the API over HTTP;
-                       Trade-Partner Concentration section reflects whatever the weekly DAG last landed)
+FastAPI  (/suppliers — the CI-tested, verified path)
+Streamlit dashboard  (charts direct from DuckDB, CI-tested; Trade-Partner Concentration
+                       section reflects whatever the weekly DAG last landed)
 ```
+
+An LLM-based decision agent (`agent/decision_agent.py`, a direct Anthropic SDK
+tool-calling loop against the gold layer) and a corresponding `/decisions/ask`
+endpoint and dashboard widget also exist in this repo. They're not covered by CI
+(`tests/test_agent.py` requires a live `ANTHROPIC_API_KEY` that isn't configured as a
+secret anywhere) and have never been verified end-to-end against a real Claude
+response — see `DECISIONS.md`, Phase 4 and Phase 7, for exactly what was and wasn't
+checked. Treat that code as present, not as a proven capability.
 
 On Streamlit Community Cloud, `streamlit_app.py` bootstraps a synthetic database via
 `data/sample_data.py` instead of running dbt (Cloud can't run the real Kaggle-CSV
