@@ -2218,6 +2218,386 @@ Brazil 76, Argentina 32 — x 3 commodities x 2 periods), plus `dbt build`.
 
 ---
 
-*This document now covers all six phases. Any further work on this project should
+## Phase 7 — CI/CD: GitHub Actions
+
+Every prior phase's tests, dbt checks, and Docker builds were run by hand, by
+whoever happened to be sitting at the keyboard, whenever they remembered to. This
+phase closes that gap: a GitHub Actions workflow now runs the real test suite,
+the real dbt build, and a real Docker image build automatically on every push and
+every PR to `main` — and, unlike every cloud deployment artifact in Phases 3, 4,
+and 6, this one was not just written and validated locally. It was triggered for
+real, on GitHub's own infrastructure, and the actual run output is quoted below,
+not summarized from memory.
+
+### 1. Why GitHub Actions, and why this needed almost no new infrastructure decision
+
+**What was built.** `.github/workflows/ci.yml` — two jobs, triggered on
+`push`/`pull_request` to `main`, no path filters.
+
+**Why GitHub Actions specifically, briefly.** This wasn't a real build-vs-buy
+decision the way App Runner-vs-Fargate (Phase 3) or self-hosted-vs-managed Airflow
+(Phase 6) were — the repo is already hosted on GitHub, GitHub Actions is free for
+public repositories, and it requires zero new accounts, credentials, or
+infrastructure beyond a YAML file in the repo itself. Every other CI option
+(CircleCI, Jenkins, a self-hosted runner) would add an external account and a
+second place for configuration to live, for a project that has no other reason to
+leave GitHub. The interesting decisions in this phase are all about what runs
+inside the workflow, not about which CI product hosts it.
+
+**Why no path filters (`paths:` / `paths-ignore:`).** A change to almost any file
+in this repo can affect the checks that matter: an ingestion script change affects
+what bronze looks like, a dbt model change affects the gold layer, a
+`requirements-api.txt` change affects whether the Docker image builds. Scoping the
+trigger to "only run when `dbt/**` changes" would require this project to
+correctly declare its own internal dependency graph in the workflow file — a
+second, easier-to-forget place for that graph to live, separate from dbt's own
+`ref()`/`source()` graph, which is the one that's actually authoritative. Running
+the full gate on every push is slightly wasteful on GitHub's free compute; it is
+never wrong.
+
+---
+
+### 2. The real gap this phase found: dbt tests have nothing to run against in a fresh CI checkout
+
+**What was found.** `dbt build` (which runs models, then tests) needs a populated
+`bronze` schema to do anything — every silver model selects from
+`{{ source('bronze', '...') }}`. A fresh `git clone` in a CI runner has an empty
+DuckDB file. Populating bronze the way local development does requires either the
+real Olist CSVs (gitignored, ~120MB, Kaggle-licensed — not something this repo can
+or should commit) or live calls to the UN Comtrade and World Bank APIs (both
+already documented in Phases 4 and 6 as rate-limited and, in this project's own
+testing, occasionally flaky from this environment's network). Neither is
+acceptable for a CI gate whose entire purpose is "tell me with certainty whether
+my code change broke something" — a gate that can fail because Kaggle wasn't
+reachable, or because Comtrade rate-limited a request, is a gate nobody will trust
+after the second false alarm.
+
+**What was built instead.** `scripts/build_ci_fixture_db.py` — a small, fully
+synthetic bronze layer, covering exactly the 8 bronze tables any dbt model
+actually references (checked directly with
+`grep -rho "source('bronze', '...')" dbt/models`, not assumed from the 11 tables
+`sources.yml` declares — 3 of those 11, `customers`, `geolocation`, and
+`order_payments`, are declared but never selected by any current model and
+correctly don't need a fixture row).
+
+**Why a hand-built fixture instead of, say, checking a small real Olist sample
+into the repo.** A hand-built fixture can be deliberately shaped to exercise
+specific branches in the SQL — a category that clears
+`gold_sourcing_cost_drivers`' `>= 30`-item threshold and one that deliberately
+doesn't, two Comtrade periods so `gold_trade_concentration_shift`'s `LAG()` logic
+has something to compare against, a seller cohort that straddles the
+`gold_risk_score_validation` backtest's 2018-01-01 split — in a way that a random
+100-row slice of real Olist data would not reliably do (real data has no
+obligation to happen to contain a seller with exactly the right order-count
+distribution on both sides of an arbitrary date). It is also unambiguous about its
+own nature: nobody reading `build_ci_fixture_db.py` could mistake its output for
+real customer data, whereas a committed "small real sample" invites exactly that
+confusion later.
+
+**Likely interview question:** *"Doesn't a synthetic fixture mean CI never
+actually validates against real data quality issues — a genuine null spike in a
+new Olist export, a Comtrade schema change?"*
+**Answer, honestly:** Correct, and that's a real, named boundary, not an
+oversight. This CI gate answers "is the SQL logic correct" — do the joins,
+aggregations, and thresholds behave as intended given data shaped like the real
+thing. It does not and cannot answer "did today's real data quietly change shape
+in a way the models don't handle" — that's a data-observability problem (schema
+drift detection, volume anomaly alerts on the real pipeline), a different and
+complementary concern from what a code-correctness CI gate is built to catch. A
+production version of this project would want both: this CI gate for every code
+change, plus monitoring on the real, scheduled pipeline runs (Phase 6's Airflow
+DAG) for data-shape drift that no fixture could ever anticipate.
+
+---
+
+### 3. Validating the fixture locally, first — and the real bug it caught before CI ever saw it
+
+**What was done.** Before writing a single line of the GitHub Actions workflow,
+the fixture generator was run locally and its output fed through a real
+`dbt build`. The first attempt failed:
+
+```
+Runtime Error in model silver_world_bank_lpi (models/silver/silver_world_bank_lpi.sql)
+Binder Error: Referenced column "_loaded_at" not found in FROM clause!
+```
+
+The fixture's `world_bank_lpi` table was missing a `_loaded_at` column that
+`silver_world_bank_lpi.sql` selects — a real gap in the fixture script, caught by
+actually running it, not by re-reading the SQL more carefully. Fixed, re-run:
+all 57 checks (17 models, 39 tests, 1 seed) passed clean, with zero models
+skipped (the first failed run had silently skipped 7 downstream checks —
+`gold_country_logistics_scorecard` and `gold_macro_context` among them — because
+dbt skips anything depending on a model that errored; a failure log that only
+shows one red error line while several other checks quietly never ran is easy to
+misread as "one small thing broke" when the real blast radius is larger).
+
+**Why this matters enough to write down.** This is the same discipline this
+project applied to the Comtrade partner-code filter in Phase 6 (verify against
+real output, not just against the code reading correctly) and to every cloud
+Terraform config in Phases 3, 4, and 6 (`validate` first, and be explicit about
+what `validate` does and doesn't prove) — applied here to the CI fixture itself.
+A CI workflow that had been pushed without this local check first would have
+produced this exact same failure, just on GitHub's infrastructure instead of a
+laptop, several minutes slower to discover and with a live push already
+consuming one of the "show me it really works" attempts this task explicitly
+asked for.
+
+---
+
+### 4. Job structure: two parallel jobs, no suppressed exit codes, no `continue-on-error`
+
+**What was built.** Two independent jobs — `dbt + pytest` (dependency install →
+fixture build → `dbt build` → `pytest`) and `Docker build (API image)` (checkout →
+`docker build -f docker/Dockerfile.api`). Neither job sets `continue-on-error`
+anywhere, and no step pipes its exit code through anything that would swallow a
+failure (no `|| true`, no `; exit 0`).
+
+**Why two jobs instead of one linear job.** They test genuinely independent
+things — dbt/pytest correctness has nothing to do with whether the Docker image
+builds, and a broken `requirements-api.txt` shouldn't block seeing whether the
+data-layer tests passed, or vice versa. Splitting them also means GitHub Actions
+runs them in parallel by default, and a failure in one names itself clearly in
+the UI without being buried in a single long combined log.
+
+**Why `requirements-dev.txt` and not the root `requirements.txt`.** This project
+has four requirements files for four different deploy targets (`requirements.txt`
+root — Streamlit Community Cloud, deliberately slim, Phase 1 decision #10;
+`requirements-api.txt` — the AWS/GCP container; `requirements-airflow.txt` — the
+self-hosted Airflow image; `requirements-dev.txt` — full local development). Only
+`requirements-dev.txt` contains `dbt-core`, `dbt-duckdb`, and `pytest` at all —
+using the root file here wouldn't produce a slower CI run, it would produce a CI
+run where steps 2 and 3 of the task's own requirements (dbt tests, pytest) are
+literally impossible to execute, failing with `command not found` rather than a
+real test result. Picking the right one of four files each with a genuinely
+different purpose is exactly the kind of thing worth being deliberate about
+rather than defaulting to the first `requirements*.txt` a directory listing
+shows.
+
+**Why the Docker job builds `Dockerfile.api` only, not `Dockerfile.dashboard` or
+`Dockerfile.airflow` too.** `Dockerfile.api` is the one image actually deployed
+anywhere real (AWS App Runner, GCP Cloud Run — Phases 3 and 4) — it's the image
+whose breakage has an actual production consequence. This is a scope decision
+worth stating honestly as a real, current gap rather than silently covering only
+part of the ask and calling it done: `Dockerfile.dashboard` and
+`Dockerfile.airflow` could silently stop building and this CI workflow would not
+notice. Extending the same job to build all three is a small, mechanical addition
+(one more `docker build -f ... .` line per image) and is the natural next
+increment, not done here to keep this phase's Docker check matched to what's
+actually deployed today.
+
+---
+
+### 5. Verifying the Docker build step actually works, before trusting GitHub's runner to prove it
+
+**What was found.** No prior phase in this project ever had a working Docker
+daemon available — Phase 3's `Dockerfile.api` correctness was verified by copying
+its exact file set into an isolated directory and running the resulting Python
+directly, an honest but real proxy for "the container would work," not the
+container itself.
+
+**What changed this phase.** Docker was installed for real — Colima (a
+lightweight, CLI-only Docker daemon backed by a small Lima VM) plus the Docker
+CLI, both via Homebrew, since no Docker Desktop was present and a VM-based daemon
+was the option that didn't require GUI interaction to set up. `docker build -f
+docker/Dockerfile.api -t ci-test-api:local .` was run for the first time ever
+against this project's real Dockerfile, and it succeeded. The resulting image was
+then actually run (`docker run`, bind-mounting the real project `data/` directory)
+and hit with real HTTP requests: `/health` returned `{"status":"ok","db":"ok"}`
+and `/suppliers/?limit=1` returned real supplier-scorecard JSON. This is the first
+point in this project's entire history that `docker/Dockerfile.api` has been
+proven to actually build and run a working container, rather than proven correct
+by simulation.
+
+**Likely interview question:** *"If this had never been tested with a real Docker
+daemon before, how confident were you that Phase 3's simulation-based validation
+was actually equivalent?"*
+**Answer, honestly:** Confident but not certain, and this phase is the resolution
+of that uncertainty, not a restatement of it. The simulation (copying the exact
+file set, installing only `requirements-api.txt` into a clean venv, running
+`uvicorn` directly) was a genuinely strong proxy — it would have caught a missing
+dependency or a wrong import path — but it could not have caught anything
+specific to the container runtime itself (a base-image quirk, a `COPY` path that
+resolves differently under Docker's build context than under a plain file copy).
+Nothing in that category *did* turn up when the real build finally ran, which is
+a good outcome, but the honest framing is "the simulation turned out to be
+accurate," not "the simulation made real verification unnecessary."
+
+**The workflow YAML itself was also checked with a purpose-built tool, not just
+read carefully:** `actionlint` (installed via Homebrew, the standard GitHub
+Actions workflow linter — it understands the `on:`/`jobs:`/`steps:` schema and
+common mistakes specific to Actions syntax, which a generic YAML parser doesn't)
+ran against `.github/workflows/ci.yml` with zero findings before this workflow
+was ever committed.
+
+---
+
+### 6. The push itself was blocked twice, by two different, real GitHub permission gates — worked through, not routed around
+
+**What happened, in order.** The first `git push` of the new workflow file was
+rejected outright:
+
+```
+! [remote rejected] main -> main (refusing to allow a Personal Access Token
+to create or update workflow `.github/workflows/ci.yml` without `workflow` scope)
+```
+
+This is a GitHub server-side rule, specific to paths under `.github/workflows/`:
+a token needs the `workflow` OAuth scope explicitly, regardless of the
+repository's own permission settings — a `repo`-scoped token that can push
+anywhere else in the same repository is still rejected for this one path. The
+cached credential (a plain PAT, from earlier phases' pushes) had never needed
+this scope before, because no earlier phase had touched `.github/`.
+
+The fix was not immediate, either: authenticating fresh via `gh auth login`'s
+device-code flow (browser approval, no password/token typed anywhere) produced a
+token scoped to `gist`, `read:org`, `repo` — **`gh`'s own default login scopes do
+not include `workflow`** unless requested explicitly. A second device-code
+approval, this time via `gh auth refresh --scopes workflow`, was required before
+`gh auth status` showed the `workflow` scope actually present. Only then did
+`gh auth setup-git` (wiring the now-correctly-scoped credential into git's own
+credential helper) let the push through.
+
+**Why this is worth documenting instead of treating as a boring auth hiccup.**
+Two real, independent permission gates blocked this task, back to back, each with
+a different specific fix, and both were surfaced to the project owner directly
+rather than worked around — no attempt was made to, say, strip the workflow file
+down to something that wouldn't trigger the path-based restriction, or to encode
+the file differently to dodge the check. That restraint is the same standard this
+project has held cloud deployment to since Phase 3 (stop and report a blocker
+rather than silently substitute a different architecture to route around it) —
+applied here to a GitHub permissions quirk instead of an AWS account
+subscription gate, but the same principle.
+
+**Likely interview question:** *"Why didn't the first `gh auth login` just work —
+isn't requesting broad scopes the default for a CLI tool like this?"*
+**Answer:** No, and that's a deliberate, documented design choice by the `gh` CLI
+itself, not a bug — it requests a conservative default scope set and expects
+callers who need something more specific (like `workflow`, which grants the
+ability to modify CI/CD definitions — a meaningfully more sensitive permission
+than reading issues or pushing to a branch) to ask for it explicitly via
+`gh auth refresh --scopes ...` or `gh auth login --scopes ...`. Least-privilege
+by default, with an explicit escalation step, is the correct instinct for a tool
+that manages credentials — it just meant this task needed two rounds of user
+approval instead of one, which is worth naming plainly rather than glossing over
+as "logged in, moved on."
+
+---
+
+### 7. The real, triggered run — quoted, not summarized
+
+**What was verified.** After the push succeeded (commit `53da4b6`, on top of
+`0146cf1`), the GitHub Actions REST API — polled unauthenticated at first, since
+this repository is public, and confirmed reachable that way before any `gh` auth
+existed this session — showed a run start within seconds of the push landing.
+Polled to completion:
+
+```
+Run 33985360545 — trigger: push, commit 53da4b6 — status: completed, conclusion: success
+```
+
+Job and step-level results, pulled from the GitHub API directly (not retyped from
+watching a browser):
+
+| Job | Step | Result | Duration |
+|---|---|---|---|
+| dbt + pytest | Install dependencies | success | 38s |
+| dbt + pytest | Build CI fixture database | success | 2s |
+| dbt + pytest | dbt build (models + data-quality tests) | success | 7s |
+| dbt + pytest | pytest | success | 6s |
+| Docker build (API image) | Build API image | success | 20s |
+
+And the actual log text, pulled via `gh run view --log` (not paraphrased):
+
+```
+Done. PASS=57 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=57
+============================== 29 passed in 5.10s ==============================
+```
+
+**Why quoting the raw log line matters here specifically.** This project's whole
+documentation practice has been "show the real number, not a description of the
+real number" — the same standard applied to Phase 6's actual Comtrade API
+responses and Phase 5's actual backtest output applies here: a CI run that's
+merely described as "passing" is a claim; a CI run whose actual `PASS=57 ERROR=0`
+log line is quoted, from a run whose ID and commit SHA are both stated, is
+verifiable by anyone who opens the same URL.
+
+---
+
+### 8. What this CI gate does not cover — stated plainly, matching this project's own standard for itself
+
+**`test_agent.py` has zero CI coverage, and that's a real gap in exactly the
+component that's the centerpiece of this project's "AI decision engine" framing.**
+It's excluded deliberately (a live smoke test against the real Anthropic API,
+requiring `ANTHROPIC_API_KEY` — not configured as a repository secret, and
+intentionally not added as one in this phase, since wiring a real LLM credential
+into a CI system that runs on every PR — including PRs from forks, which get a
+read-only token by default but this repo has no branch-protection rules
+configured yet to enforce that distinction — is a decision that deserves its own
+explicit review, not a drive-by addition alongside a CI/CD phase). The honest
+next step, named rather than done here: a version of `agent/decision_agent.py`'s
+tool-calling loop tested against a *mocked* Anthropic client (the same `responses`
+library already used to mock HTTP calls to Comtrade and World Bank in Phases 4
+and 6) would give real coverage of the tool-dispatch logic without ever touching
+a live API key — that's buildable without secrets and isn't in this workflow yet.
+
+**This is CI, not CD — the workflow builds the Docker image, it never pushes it
+anywhere or triggers a deploy.** That precisely matches what this phase was asked
+to build (install deps, dbt test, pytest, "attempt to build the Docker image to
+confirm it doesn't break") — but it's worth being explicit that "build" and
+"deploy" are different verbs, and nothing in this workflow updates the AWS ECR
+image, App Runner service, or GCP Artifact Registry from Phases 3/4. Extending
+this workflow to push to ECR/Artifact Registry on a merge to `main` (using
+OIDC-federated cloud credentials rather than long-lived keys, ideally) is the
+natural next phase, in the same spirit as Phase 6's own "no CI/CD pipeline yet"
+admission about the Airflow deploy story.
+
+**The fixture and the workflow's Python version were validated in two different
+Python environments, not one.** Local validation of the fixture script and the
+resulting `dbt build`/`pytest` output ran on Python 3.13.5 (this project's local
+`.venv`, matched throughout Phases 1-6). The workflow itself pins Python 3.12 —
+a deliberately more conservative, broadly-compatible choice for a CI runner than
+matching the exact local version — and the *first* time this project's dbt/pytest
+suite ever ran on 3.12 specifically was the real GitHub Actions run itself, not a
+local dry run. It passed. That's a genuinely good outcome, but the honest framing
+again is "it happened to pass," not "it was pre-validated on that exact version" —
+a subtle distinction worth being able to name if asked directly whether the local
+validation and the CI environment were identical (they were not, on this one
+axis).
+
+**The fixture needs manual maintenance as the dbt project grows.** If a future
+model adds a new bronze column reference, `dbt build` will fail loudly in CI with
+a clear "column not found" compile error (a feature — see #3 above, this is
+exactly the failure mode the local validation step caught) — but someone has to
+notice that failure and update `build_ci_fixture_db.py` to match, by hand. There
+is no automated check that the fixture stays in sync with the dbt project's
+actual source references; it's re-derived by inspection each time, the same way
+it was built in this phase.
+
+---
+
+## Phase 7 — real numbers (for citation)
+
+All numbers below are quoted directly from a real, completed GitHub Actions run —
+re-open `https://github.com/akhil-partheeban/supply-chain-decision-engine/actions/runs/33985360545`
+to see the same output live, or trigger a fresh run for current numbers.
+
+| Metric | Value |
+|---|---|
+| Workflow trigger verified | Real `git push` to `main`, commit `53da4b6` |
+| Run ID | 33985360545 |
+| Run conclusion | success |
+| dbt checks (models + tests + seed) | PASS=57, WARN=0, ERROR=0, SKIP=0, NO-OP=0, TOTAL=57 |
+| pytest results | 29 passed, 0 failed, in 5.10s |
+| Docker image build | success, 20s (`docker/Dockerfile.api`, the image actually deployed to AWS/GCP) |
+| Dependency install time | 38s (`pip install -r requirements-dev.txt`) |
+| Bronze tables in the CI fixture | 8 (every source any current dbt model references — 3 of 11 declared sources are unused and correctly excluded) |
+| Real bug the fixture caught locally, pre-push | 1 (missing `_loaded_at` column on the synthetic `world_bank_lpi` table — a `dbt build` Binder Error, caught before ever reaching CI) |
+| Real permission gates encountered and resolved | 2 (missing `workflow` OAuth scope on the cached PAT; `gh`'s own default login scopes also excluding `workflow`, requiring a second explicit `gh auth refresh --scopes workflow`) |
+| Tools installed this phase to make verification real (not simulated) | Docker + Colima (real container builds/runs, first time in this project's history), GitHub CLI (`gh`), `actionlint` |
+| CI coverage gaps stated honestly | `test_agent.py` (live-LLM smoke test) has zero CI coverage; the workflow builds `Dockerfile.api` only, not `Dockerfile.dashboard`/`Dockerfile.airflow`; this is CI (build/test) with no CD (deploy) step; local fixture validation ran on Python 3.13, CI pins 3.12 |
+
+---
+
+*This document now covers all seven phases. Any further work on this project should
 add a new dated section here rather than editing the phase sections above — those are
 a historical record of what was decided and why, not a living spec.*
