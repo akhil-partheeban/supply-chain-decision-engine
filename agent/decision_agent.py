@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DB_PATH = os.getenv("DUCKDB_PATH", "data/duckdb/supply_chain.duckdb")
-MODEL = "claude-sonnet-4-20250514"
+MODEL = "claude-sonnet-5"
 
 SYSTEM_PROMPT = """You are a supply chain analyst assistant with access to a DuckDB database
 containing Olist e-commerce data.

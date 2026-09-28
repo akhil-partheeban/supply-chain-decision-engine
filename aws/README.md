@@ -4,14 +4,12 @@ Deploys two things: the data layer to **S3** (Parquet exports of every bronze/si
 gold table, plus a DuckDB snapshot), and the FastAPI service to **App Runner** (AWS's
 managed-container equivalent of GCP Cloud Run) as a Docker image hosted in **ECR**.
 
-> **This infrastructure has not been applied to a live AWS account.** The Terraform in
-> `terraform/` was written, formatted (`terraform fmt`), and validated
-> (`terraform init && terraform validate`) against the real AWS provider schema — that
-> confirms the HCL is syntactically and semantically correct — but `terraform plan`/
-> `apply` were not run, because no AWS credentials were available in the environment
-> this was built in. Applying this will create real, billable resources in your AWS
-> account; run it yourself (or hand me credentials and ask explicitly) rather than
-> assuming it's already live. See `DECISIONS.md` (Phase 3) for the full reasoning.
+> **This infrastructure is live.** Account `650126342842`, region `us-east-2`: S3 bucket,
+> ECR repo, IAM roles, and the App Runner service (`supply-chain-decision-engine-api`)
+> are all applied and running — API at the URL from `terraform output api_service_url`.
+> Applying/destroying this stack affects real, billable resources; treat `terraform
+> apply`/`destroy` here the same as you would against any other live account. See
+> `DECISIONS.md` (Phase 3) for the original design reasoning.
 
 ## Architecture
 
@@ -53,6 +51,27 @@ cd ../..              # repo root
 `deploy.sh` builds `docker/Dockerfile.api`, pushes it to the ECR repo Terraform just
 created, exports the current gold layer to the S3 bucket via
 `scripts/export_to_s3.py`, and triggers an App Runner deployment.
+
+### Gotchas on Apple Silicon (arm64) dev machines
+
+- **App Runner only runs amd64 images.** `docker build` on an M-series Mac produces an
+  arm64 image by default — it pushes to ECR fine but every instance crash-loops with
+  `exec format error`. Build for the target platform explicitly:
+  `docker buildx build --platform linux/amd64 -f docker/Dockerfile.api -t <ecr-repo>:latest --push .`
+  (requires the `docker-buildx` CLI plugin — `brew install docker-buildx` if you're on
+  Colima rather than Docker Desktop, which bundles it). `deploy.sh`'s plain
+  `docker build` step doesn't do this automatically; swap in the `buildx` command above
+  until the script is updated.
+- **`scripts/export_to_s3.py` only reads AWS creds from `AWS_ACCESS_KEY_ID` /
+  `AWS_SECRET_ACCESS_KEY` env vars**, not a `~/.aws/credentials` profile, even though a
+  profile is enough for every other AWS CLI/Terraform command in this doc. If those two
+  env vars aren't set, DuckDB's httpfs extension silently makes an unauthenticated
+  request and fails with a 403. Export them from your profile first if needed:
+  `export AWS_ACCESS_KEY_ID=$(aws configure get aws_access_key_id)` /
+  `export AWS_SECRET_ACCESS_KEY=$(aws configure get aws_secret_access_key)`.
+- A service stuck in `CREATE_FAILED` (e.g. from the arch mismatch above) can't be fixed
+  with another `apply` in place — App Runner requires deleting and recreating it:
+  `terraform destroy -target=aws_apprunner_service.api` then `terraform apply` again.
 
 ## Day-to-day: refreshing the data layer
 

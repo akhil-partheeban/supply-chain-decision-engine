@@ -61,7 +61,7 @@ def _configure_httpfs(conn: duckdb.DuckDBPyConnection) -> None:
     """
     conn.execute("INSTALL httpfs")
     conn.execute("LOAD httpfs")
-    region = os.getenv("AWS_REGION", "us-east-1")
+    region = os.getenv("AWS_REGION", "us-east-2")
     conn.execute(f"SET s3_region='{region}'")
     access_key = os.getenv("AWS_ACCESS_KEY_ID")
     secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
@@ -102,7 +102,7 @@ def export_db_snapshot(db_path: str, dest: str) -> str:
         import boto3
         parsed = urlparse(target)
         bucket, key = parsed.netloc, parsed.path.lstrip("/")
-        boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-1")).upload_file(
+        boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-2")).upload_file(
             db_path, bucket, key
         )
     else:
@@ -127,7 +127,7 @@ def export_raw_csvs(raw_dir: str, dest: str) -> list[str]:
         import boto3
         parsed = urlparse(dest)
         bucket, prefix = parsed.netloc, parsed.path.lstrip("/")
-        s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-1"))
+        s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-2"))
         for f in csv_files:
             key = f"{prefix.rstrip('/')}/raw/{f.name}"
             s3.upload_file(str(f), bucket, key)

@@ -19,7 +19,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."   # repo root
 
-REGION="${AWS_REGION:-us-east-1}"
+REGION="${AWS_REGION:-us-east-2}"
 PROJECT_NAME="${PROJECT_NAME:-supply-chain-decision-engine}"
 
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)

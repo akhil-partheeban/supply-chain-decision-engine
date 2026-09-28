@@ -37,11 +37,13 @@ aws/terraform/.terraform/
 aws/terraform/*.tfstate
 aws/terraform/*.tfstate.*
 aws/terraform/*.tfplan
+aws/terraform/tfplan
 aws/terraform/.terraform.tfstate.lock.info
 gcp/terraform/.terraform/
 gcp/terraform/*.tfstate
 gcp/terraform/*.tfstate.*
 gcp/terraform/*.tfplan
+gcp/terraform/tfplan
 gcp/terraform/.terraform.tfstate.lock.info
 
 # IDE
