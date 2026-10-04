@@ -56,12 +56,36 @@ models:
         tests:
           - not_null
 
+  - name: silver_order_item_emissions
+    description: One row per (order_id, order_item_id) — estimated spend-based Scope 3 kg CO2e, via category_to_naics and epa_ghg_emission_factors. NULL factor/estimate for items whose category has no NAICS mapping or is itself NULL.
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+
   - name: comtrade_partner_areas
     description: "Seed: UN Comtrade's own partner-country reference data (pulled from https://comtradeapi.un.org/files/v1/app/reference/partnerAreas.json), not hand-typed."
     columns:
       - name: partner_code
         tests:
           - unique
+          - not_null
+
+  - name: category_to_naics
+    description: >
+      Seed: hand-built mapping from each of Olist's 73 real product_category
+      values (as they actually appear in silver_order_items — not the 71 from the
+      translation table alone, since 2 categories have no English translation
+      row) to one 2017 NAICS-6 commodity code each, with a one-sentence rationale
+      per row. Judgment-based, not algorithmic — see DECISIONS.md, Phase 8, for
+      the method and its limits.
+    columns:
+      - name: product_category
+        tests:
+          - unique
+          - not_null
+      - name: naics_code
+        tests:
           - not_null
 
   - name: epa_ghg_emission_factors

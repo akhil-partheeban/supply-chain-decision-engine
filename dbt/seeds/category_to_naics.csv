@@ -1,0 +1,74 @@
+product_category,naics_code,naics_title,rationale
+agro_industry_and_commerce,423820,Farm and Garden Machinery and Equipment Merchant Wholesalers,"No single commodity dominates this small (212-item), vague Olist category; farm/garden-equipment wholesale trade is the closest available proxy for 'agro-industrial commerce' goods."
+air_conditioning,333415,Air-Conditioning and Warm Air Heating Equipment and Commercial and Industrial Refrigeration Equipment Manufacturing,Direct match: HVAC equipment manufacturing.
+art,453920,Art Dealers,Direct match: art retail.
+arts_and_craftmanship,451130,"Sewing, Needlework, and Piece Goods Stores",Closest retail analogue for craft/hobby materials; EPA's NAICS list has no dedicated 'arts and crafts supplies' line.
+audio,334310,Audio and Video Equipment Manufacturing,Direct match: audio equipment manufacturing.
+auto,423120,Motor Vehicle Supplies and New Parts Merchant Wholesalers,"Olist's 'auto' category is aftermarket parts/accessories, not vehicles themselves — mapped to auto-parts wholesale, not a vehicle-manufacturing code."
+baby,448130,Children's and Infants' Clothing Stores,"Imperfect but closest fit: baby gear/clothing retail. Olist's 'baby' category spans clothing, gear, and toys; diapers have their own separate category (diapers_and_hygiene) so aren't double-counted here."
+bed_bath_table,314120,Curtain and Linen Mills,Direct match: bedding/bath/table linens manufacturing.
+books_general_interest,451211,Book Stores,Direct match: book retail.
+books_imported,451211,Book Stores,Same commodity as books_general_interest — import status doesn't change the underlying good.
+books_technical,451211,Book Stores,Same commodity as books_general_interest.
+cds_dvds_musicals,334614,"Software and Other Prerecorded Compact Disc, Tape, and Record Reproducing",Direct match: prerecorded media manufacturing/reproduction.
+christmas_supplies,453220,"Gift, Novelty, and Souvenir Stores",Closest match: seasonal gift/novelty retail. No dedicated 'holiday decor manufacturing' NAICS code exists.
+cine_photo,333316,Photographic and Photocopying Equipment Manufacturing,Direct match: photographic/photocopying equipment manufacturing.
+computers,334111,Electronic Computer Manufacturing,Direct match: computer manufacturing.
+computers_accessories,334118,Computer Terminal and Other Computer Peripheral Equipment Manufacturing,Direct match: computer peripheral manufacturing.
+consoles_games,334111,Electronic Computer Manufacturing,"Game consoles are purpose-built computing devices under NAICS convention, not toys — same code as 'computers', distinct from the Doll/Toy/Game code used for 'toys'."
+construction_tools_construction,333120,Construction Machinery Manufacturing,Direct match: construction machinery manufacturing.
+construction_tools_lights,335129,Other Lighting Equipment Manufacturing,Direct match: lighting equipment manufacturing (construction-site/work lighting).
+construction_tools_safety,561621,Security Systems Services (except Locksmiths),"Weak fit, flagged honestly: EPA's NAICS-6 list has no dedicated personal-protective-equipment or safety-gear manufacturing line; security-systems services is the nearest available proxy for a 'safety' goods category."
+cool_stuff,452319,All Other General Merchandise Stores,Olist's own catch-all 'trendy gadgets' category has no single commodity; mapped to general-merchandise retail as the generic fallback.
+costruction_tools_garden,333112,Lawn and Garden Tractor and Home Lawn and Garden Equipment Manufacturing,"Direct match: garden equipment manufacturing. (Category name is Olist's own typo — 'costruction', not 'construction'.)"
+costruction_tools_tools,333991,Power-Driven Handtool Manufacturing,Direct match: power hand-tool manufacturing. (Same Olist typo as above.)
+diapers_and_hygiene,322291,Sanitary Paper Product Manufacturing,Direct match: sanitary paper products (diapers) manufacturing.
+drinks,424820,Wine and Distilled Alcoholic Beverage Merchant Wholesalers,"Judgment call: mapped to alcoholic beverage wholesale on the assumption 'drinks' (vs. the separate 'food_drink' category) skews toward wine/spirits gift sets, a common Olist marketplace item; genuinely ambiguous without SKU-level detail."
+dvds_blu_ray,334614,"Software and Other Prerecorded Compact Disc, Tape, and Record Reproducing",Same commodity as cds_dvds_musicals — prerecorded media manufacturing.
+electronics,334419,Other Electronic Component Manufacturing,General consumer-electronics component manufacturing; used as the catch-all electronics code distinct from the more specific audio/computers/telephony categories.
+fashio_female_clothing,448120,Women's Clothing Stores,"Direct match: women's clothing retail. (Category name is Olist's own typo — 'fashio', missing the 'n'.)"
+fashion_bags_accessories,448150,Clothing Accessories Stores,Direct match: clothing accessories retail.
+fashion_childrens_clothes,448130,Children's and Infants' Clothing Stores,Direct match: children's clothing retail.
+fashion_male_clothing,448110,Men's Clothing Stores,Direct match: men's clothing retail.
+fashion_shoes,316210,Footwear Manufacturing,Direct match: footwear manufacturing.
+fashion_sport,339920,Sporting and Athletic Goods Manufacturing,"Athletic apparel grouped with sporting goods manufacturing, consistent with sports_leisure's mapping."
+fashion_underwear_beach,448190,Other Clothing Stores,No dedicated underwear/swimwear NAICS line; mapped to general clothing retail as the closest fallback.
+fixed_telephony,334210,Telephone Apparatus Manufacturing,"Direct match: (landline) telephone apparatus manufacturing — distinct from 'telephony' (mobile), which maps to wireless equipment manufacturing."
+flowers,424930,"Flower, Nursery Stock, and Florists' Supplies Merchant Wholesalers",Direct match: florist supplies wholesale.
+food,311999,All Other Miscellaneous Food Manufacturing,No single food-commodity code fits a mixed packaged-food marketplace category; mapped to the EPA list's general 'miscellaneous food manufacturing' catch-all.
+food_drink,311999,All Other Miscellaneous Food Manufacturing,Same catch-all as 'food' — Olist's own taxonomy doesn't cleanly separate these two food-adjacent categories by commodity.
+furniture_bedroom,337122,Nonupholstered Wood Household Furniture Manufacturing,"Bedroom furniture (dressers, bed frames) is predominantly non-upholstered wood furniture."
+furniture_decor,442299,All Other Home Furnishings Stores,"Olist's largest single category (8,334 items) spans furniture and general home décor, not just furniture — mapped to the broader home-furnishings retail code rather than a single furniture-manufacturing line, to avoid overstating precision."
+furniture_living_room,337121,Upholstered Household Furniture Manufacturing,"Living-room furniture (sofas, upholstered seating) is predominantly upholstered furniture."
+furniture_mattress_and_upholstery,337910,Mattress Manufacturing,Direct match: mattress manufacturing.
+garden_tools,333112,Lawn and Garden Tractor and Home Lawn and Garden Equipment Manufacturing,Same commodity as costruction_tools_garden — both are garden equipment under Olist's own near-duplicate taxonomy.
+health_beauty,325620,Toilet Preparation Manufacturing,Direct match: personal-care/cosmetics (toilet preparation) manufacturing.
+home_appliances,335220,Major Household Appliance Manufacturing,Major household appliance manufacturing — distinguished from 'home_appliances_2' and 'small_appliances' by size/class.
+home_appliances_2,335210,Small Electrical Appliance Manufacturing,Olist splits appliances into two near-duplicate categories; mapped to the small-appliance code to distinguish it from 'home_appliances' (major).
+home_comfort_2,442299,All Other Home Furnishings Stores,Vague 'home comfort' catch-all with no single commodity; same general home-furnishings code as furniture_decor/home_confort.
+home_confort,442299,All Other Home Furnishings Stores,Same reasoning as home_comfort_2 — Olist has two near-identical 'home comfort' categories in its own schema.
+home_construction,444130,Hardware Stores,General home-improvement retail proxy; no single commodity fits a 'home construction' marketplace category.
+housewares,423620,"Household Appliances, Electric Housewares, and Consumer Electronics Merchant Wholesalers",Direct match: 'housewares' appears verbatim in this NAICS title.
+industry_commerce_and_business,423830,Industrial Machinery and Equipment Merchant Wholesalers,"Generic B2B/industrial-goods proxy for this vague, low-volume (268-item) category."
+kitchen_dining_laundry_garden_furniture,423210,Furniture Merchant Wholesalers,Olist's own category name spans multiple rooms' worth of furniture — mapped to general furniture trade rather than any single room-specific manufacturing code.
+la_cuisine,332215,"Metal Kitchen Cookware, Utensil, Cutlery, and Flatware (except Precious) Manufacturing",Direct match: cookware/cutlery manufacturing ('cuisine' = cookware).
+luggage_accessories,448320,Luggage and Leather Goods Stores,Direct match: luggage retail (EPA's NAICS-6 list has no dedicated luggage-manufacturing line).
+market_place,452319,All Other General Merchandise Stores,"Olist's own generic 'marketplace' catch-all category — mapped to general-merchandise retail, the genuinely generic fallback."
+music,512250,Record Production and Distribution,"Interpreted as recorded-music distribution, not musical instruments (which have their own category)."
+musical_instruments,339992,Musical Instrument Manufacturing,Direct match: musical instrument manufacturing.
+office_furniture,337211,Wood Office Furniture Manufacturing,Direct match: office furniture manufacturing.
+party_supplies,453220,"Gift, Novelty, and Souvenir Stores","Same code as christmas_supplies — both are seasonal/celebration goods under Olist's taxonomy, with no dedicated manufacturing line in the EPA list."
+pc_gamer,334111,Electronic Computer Manufacturing,Gaming PCs are computers; same code as 'computers'. Untranslated Portuguese category name (no English row in the Olist translation table).
+perfumery,446120,"Cosmetics, Beauty Supplies, and Perfume Stores",Direct match: perfume retail.
+pet_shop,453910,Pet and Pet Supplies Stores,Direct match: pet supplies retail.
+portateis_cozinha_e_preparadores_de_alimentos,335210,Small Electrical Appliance Manufacturing,Translates to 'portable kitchen appliances and food preparers' — direct match to small-appliance manufacturing. Untranslated Portuguese category name (no English row in the Olist translation table).
+security_and_services,561621,Security Systems Services (except Locksmiths),Direct match: security systems services.
+signaling_and_security,561621,Security Systems Services (except Locksmiths),Same code as security_and_services — near-duplicate categories in Olist's own taxonomy.
+small_appliances,335210,Small Electrical Appliance Manufacturing,Direct match: small appliance manufacturing.
+small_appliances_home_oven_and_coffee,335210,Small Electrical Appliance Manufacturing,"Co-located with 'coffee' in Olist's own category name, suggesting countertop/small appliances rather than major kitchen ranges — same code as small_appliances."
+sports_leisure,339920,Sporting and Athletic Goods Manufacturing,Direct match: sporting goods manufacturing — same code as fashion_sport.
+stationery,322230,Stationery Product Manufacturing,Direct match: stationery product manufacturing.
+tablets_printing_image,333316,Photographic and Photocopying Equipment Manufacturing,Olist's own category name merges tablets with printing/imaging products; mapped to printing/imaging equipment manufacturing since that's the more specific signal in the category name.
+telephony,334220,Radio and Television Broadcasting and Wireless Communications Equipment Manufacturing,"Interpreted as mobile/wireless telephony — wireless communications equipment manufacturing, distinct from fixed_telephony's landline-apparatus code."
+toys,339930,"Doll, Toy, and Game Manufacturing",Direct match: toy manufacturing.
+watches_gifts,339910,Jewelry and Silverware Manufacturing,Watches and jewelry are commonly co-classified; mapped to jewelry/silverware manufacturing.

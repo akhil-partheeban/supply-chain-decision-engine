@@ -52,10 +52,14 @@ def build_orders_and_items() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, 
       S2 unreliable, also straddles the split (4 pre + 2 post, mostly late)
       S3 pre-cutoff only (3 orders) -> excluded from the backtest (no holdout orders)
       S4 too few orders either side (1 + 1) -> excluded from the backtest (training < 3)
-      S5, S6 post-cutoff only, higher volume -> pushes the 'electronics_fixture'
+      S5, S6 post-cutoff only, higher volume -> pushes the 'electronics'
              category over gold_sourcing_cost_drivers' >=30-item bar while
-             'furniture_fixture' (S4 + S6) deliberately stays under it, so both
+             'furniture_decor' (S4 + S6) deliberately stays under it, so both
              branches of that model's HAVING filter are genuinely exercised.
+             These two category names are real Olist categories (not fixture-only
+             strings) deliberately — they need real rows in the category_to_naics
+             seed for the Phase 8 "every category has a NAICS mapping" test to be
+             a genuine check in CI, not a vacuous pass against fixture-only names.
     """
     sellers = pd.DataFrame([
         {"seller_id": "S1", "seller_zip_code_prefix": "10000", "seller_city": "sao paulo", "seller_state": "SP",
@@ -95,7 +99,7 @@ def build_orders_and_items() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, 
             "_source_file": "ci_fixture.csv",
             "_loaded_at": FIXED_LOADED_AT,
         })
-        product_id = "P_ELEC" if category == "electronics_fixture" else "P_FURN"
+        product_id = "P_ELEC" if category == "electronics" else "P_FURN"
         items.append({
             "order_id": order_id,
             "order_item_id": 1,
@@ -115,47 +119,47 @@ def build_orders_and_items() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, 
 
     # S1 — reliable, straddles the backtest split: on-time, good reviews both sides.
     for i in range(4):
-        add_order("S1", pre_cutoff + timedelta(days=i * 20), late=False, category="electronics_fixture", review_score=5)
+        add_order("S1", pre_cutoff + timedelta(days=i * 20), late=False, category="electronics", review_score=5)
     for i in range(2):
-        add_order("S1", post_cutoff + timedelta(days=i * 20), late=False, category="electronics_fixture", review_score=5)
+        add_order("S1", post_cutoff + timedelta(days=i * 20), late=False, category="electronics", review_score=5)
 
     # S2 — unreliable, straddles the split: mostly late, poor reviews both sides.
     for i in range(4):
-        add_order("S2", pre_cutoff + timedelta(days=i * 20), late=True, category="electronics_fixture", review_score=2)
+        add_order("S2", pre_cutoff + timedelta(days=i * 20), late=True, category="electronics", review_score=2)
     for i in range(2):
-        add_order("S2", post_cutoff + timedelta(days=i * 20), late=True, category="electronics_fixture", review_score=2)
+        add_order("S2", post_cutoff + timedelta(days=i * 20), late=True, category="electronics", review_score=2)
 
     # S3 — pre-cutoff only: 3 training orders, 0 holdout -> excluded from the backtest.
     for i in range(3):
-        add_order("S3", pre_cutoff + timedelta(days=i * 15), late=False, category="electronics_fixture", review_score=4)
+        add_order("S3", pre_cutoff + timedelta(days=i * 15), late=False, category="electronics", review_score=4)
 
     # S4 — too few orders on either side of the split (1 + 1): training < 3, excluded.
-    add_order("S4", pre_cutoff, late=False, category="furniture_fixture", review_score=4)
-    add_order("S4", post_cutoff, late=False, category="furniture_fixture", review_score=4)
+    add_order("S4", pre_cutoff, late=False, category="furniture_decor", review_score=4)
+    add_order("S4", post_cutoff, late=False, category="furniture_decor", review_score=4)
 
-    # S5 — post-cutoff only, high volume: pushes 'electronics_fixture' past the
-    # gold_sourcing_cost_drivers >=30-item bar (31 electronics_fixture items total
+    # S5 — post-cutoff only, high volume: pushes 'electronics' past the
+    # gold_sourcing_cost_drivers >=30-item bar (31 electronics items total
     # across S1/S2/S3/S5) and adds a MEDIUM-ish risk tier for variety.
     for i in range(16):
-        add_order("S5", post_cutoff + timedelta(days=i * 5), late=(i % 3 == 0), category="electronics_fixture", review_score=4 if i % 3 else 3)
+        add_order("S5", post_cutoff + timedelta(days=i * 5), late=(i % 3 == 0), category="electronics", review_score=4 if i % 3 else 3)
 
-    # S6 — post-cutoff only: keeps 'furniture_fixture' deliberately under the
+    # S6 — post-cutoff only: keeps 'furniture_decor' deliberately under the
     # 30-item bar (10 total with S4), so that branch of the HAVING filter is
     # exercised too (a category that correctly does NOT appear in the gold model).
     for i in range(8):
-        add_order("S6", post_cutoff + timedelta(days=i * 5), late=(i % 4 == 0), category="furniture_fixture", review_score=5 if i % 4 else 2)
+        add_order("S6", post_cutoff + timedelta(days=i * 5), late=(i % 4 == 0), category="furniture_decor", review_score=5 if i % 4 else 2)
 
     return sellers, pd.DataFrame(orders), pd.DataFrame(items), pd.DataFrame(reviews)
 
 
 def build_products() -> tuple[pd.DataFrame, pd.DataFrame]:
     products = pd.DataFrame([
-        {"product_id": "P_ELEC", "product_category_name": "eletronicos_fixture", "product_weight_g": 500},
-        {"product_id": "P_FURN", "product_category_name": "moveis_fixture", "product_weight_g": 8000},
+        {"product_id": "P_ELEC", "product_category_name": "eletronicos", "product_weight_g": 500},
+        {"product_id": "P_FURN", "product_category_name": "moveis_decoracao", "product_weight_g": 8000},
     ])
     translation = pd.DataFrame([
-        {"product_category_name": "eletronicos_fixture", "product_category_name_english": "electronics_fixture"},
-        {"product_category_name": "moveis_fixture", "product_category_name_english": "furniture_fixture"},
+        {"product_category_name": "eletronicos", "product_category_name_english": "electronics"},
+        {"product_category_name": "moveis_decoracao", "product_category_name_english": "furniture_decor"},
     ])
     return products, translation
 
