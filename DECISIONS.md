@@ -2602,6 +2602,217 @@ to see the same output live, or trigger a fresh run for current numbers.
 
 ---
 
-*This document now covers all seven phases. Any further work on this project should
+## Phase 8 — Supplier Emissions Layer (Spend-Based Scope 3)
+
+### 1. What was built
+
+A new gold-layer capability alongside the existing risk/concentration models,
+estimating each supplier's Scope 3 (purchased-goods) greenhouse-gas footprint and
+blending it with the existing `reliability_score`:
+
+- `epa_ghg_emission_factors` (seed) — EPA's Supply Chain GHG Emission Factors for
+  US Industries and Commodities, v1.3.0 (published 2024-07-05), 1,016 rows, one
+  per 2017 NAICS-6 commodity code, downloaded directly from EPA's own hosting
+  and verified (not hand-typed or approximated) before loading.
+- `category_to_naics` (seed) — hand-built mapping from all 73 real Olist
+  `product_category` values (verified against the live database, not the 71 from
+  the translation table alone) to one NAICS-6 code each, with a rationale per row.
+- `silver_order_item_emissions` — per-order-item estimated kg CO2e.
+- `gold_supplier_emissions` — rolled up to seller grain: spend, estimated Scope 3
+  kg CO2e, emissions intensity, primary category, in-category rank.
+- `gold_supplier_risk_emissions_score` — `reliability_score` and
+  `emissions_intensity`, each percentile-ranked and blended.
+- `gold_supplier_emission_swap_suggestions` — for high-emission suppliers, the
+  best same-category, no-worse-risk, sufficient-volume alternative.
+- A dashboard "Emissions" tab (risk-vs-emissions scatter, swap suggestions table).
+
+### 2. Spend-based, not activity-based — and why that's the right call here
+
+**What spend-based means.** Multiply a dollar amount of purchased goods by an
+emission factor (kg CO2e per dollar of spend, for that type of good) to estimate
+the emissions embedded in producing it. This is the GHG Protocol's "Category 1:
+Purchased Goods and Services, spend-based method." The alternative,
+**activity-based**, multiplies a physical quantity (kg of steel, liters of fuel,
+units of a specific SKU) by a factor per physical unit — far more accurate, but
+it requires knowing what was actually purchased in physical terms, ideally with
+supplier-specific or product-specific factors.
+
+**Why spend-based here.** Olist's data gives order-item `price` and a product
+category, not physical quantities, materials, or manufacturing processes for any
+of the ~33,000 distinct products. An activity-based estimate would require data
+this dataset simply does not contain — inventing physical quantities to enable a
+"more precise-looking" method would be worse than being honest about a spend-based
+estimate's cruder precision. This matches the project's existing standard (stated
+flatly in Phase 5 and Phase 6): don't fabricate precision the underlying data
+can't support.
+
+**What this costs in accuracy, stated plainly.** Spend-based factors are national
+*industry averages* — they say nothing about whether a specific supplier runs an
+efficient or wasteful operation, uses renewable or fossil power, etc. Two
+suppliers selling physically identical goods get identical intensity estimates
+under this method regardless of how they actually operate. This is the
+GHG Protocol's own acknowledged limitation of the spend-based method, not
+something specific to this implementation.
+
+### 3. Category-to-NAICS mapping: method, and what it found
+
+Built by grepping the EPA file's actual 1,016 NAICS titles for the closest
+commodity match to each of Olist's 73 real categories (verified against the live
+database — `silver_order_items.product_category`, not just the 71 rows in
+`product_category_name_translation`), then writing a one-sentence rationale per
+row. Two categories (`pc_gamer`,
+`portateis_cozinha_e_preparadores_de_alimentos`) have no English translation row
+at all and were mapped directly off their Portuguese names.
+
+**A real data quirk this surfaced**: Olist's own category taxonomy has several
+near-duplicate pairs with no clean distinction — `home_confort` /
+`home_comfort_2`, `security_and_services` / `signaling_and_security`,
+`small_appliances` / `small_appliances_home_oven_and_coffee`, and three
+categories carrying Olist's own typos (`fashio_female_clothing`,
+`costruction_tools_construction`, `costruction_tools_garden`,
+`costruction_tools_tools`). Several of these pairs were deliberately mapped to
+the *same* NAICS code rather than forced into an artificial distinction the
+source data itself doesn't support.
+
+**Where the mapping is weakest, named honestly**: a handful of categories have no
+good single-commodity match at all (`construction_tools_safety`, `cool_stuff`,
+`market_place`, `agro_industry_and_commerce`) and were mapped to the closest
+generic retail/wholesale-trade NAICS code available, flagged as a weak fit
+directly in `category_to_naics.csv`'s own rationale column for those rows.
+
+### 4. BRL → 2022-USD conversion: a two-step, both steps documented
+
+Olist prices are nominal BRL, mostly 2017-2018 (2018 is the modal order year, 54%
+of orders). EPA's factors are kg CO2e per *2022* USD. Converting required two
+separate, independently-sourced assumptions (both `dbt_project.yml` vars):
+
+1. **FX**: `brl_to_usd_rate = 0.2728` (1 USD = 3.6656 BRL), the 2018 annual
+   average rate (x-rates.com). A *nominal* historical rate, not
+   purchasing-power-parity-adjusted.
+2. **CPI**: `cpi_2018_to_2022_adjustment = 1.1655`, from BLS CPI-U (U.S. city
+   average, all items, 1982-84=100 annual average): 251.107 (2018) → 292.655
+   (2022).
+
+**The honest gap**: this corrects for *US* inflation between 2018 and 2022 — it
+does not correct for Brazilian inflation or BRL/USD exchange-rate drift over that
+same window, nor does it vary by actual order year (every order, whether from
+2016 or 2018, is converted at the single 2018 rate). A more careful version would
+convert each order at its own year's FX rate before applying the CPI step; this
+implementation uses one fixed rate for simplicity, stated here rather than hidden.
+
+### 5. Percentile rank, not min-max, for the blended score
+
+`gold_supplier_risk_emissions_score` converts both `reliability_score` and
+`emissions_intensity` to a `percent_rank()` percentile before blending (default
+weight 0.5/0.5, via `emissions_score_risk_weight`).
+
+**Why not min-max** (`(x - min) / (max - min)`): `emissions_intensity` has real
+outliers — a handful of suppliers whose mapped spend is dominated by one
+unusually carbon-intensive category sit far above the bulk of the distribution.
+Under min-max scaling, those outliers would compress every *other* supplier's
+scaled score into a narrow band near 0, making the blended score far less useful
+for distinguishing the other 99% of suppliers. `percent_rank()` only cares about
+relative order — one extreme supplier occupies one percentile slot and does not
+distort anyone else's. The same reasoning is why `gold_supplier_scorecard`'s
+reliability formula (Phase 1) uses a *capped* stddev component rather than a raw
+min-max of delivery-day variance — this project has made the same "resist
+outliers over raw linear scaling" call before.
+
+**Cost of this choice**: percentile rank discards magnitude. A supplier at the
+51st percentile and one at the 99th percentile of emissions intensity could have
+wildly different absolute kg CO2e/USD, or could be nearly identical — the
+percentile alone doesn't say. `emissions_intensity` itself (the raw figure) is
+still carried on the table for anyone who needs the actual magnitude, not just
+the rank.
+
+### 6. Limits, stated honestly (the full list)
+
+1. **US emission factors applied to a Brazilian marketplace.** The EPA dataset
+   reflects the carbon intensity of *US* production and distribution for each
+   commodity type — US electricity-grid mix, US manufacturing efficiency, US
+   transport distances. None of that necessarily resembles how the same goods are
+   actually produced and moved in Brazil. This is the single largest source of
+   error in the whole estimate, and there is no correction for it in this
+   implementation.
+2. **Spend-based ignores supplier-specific practices entirely.** Every seller in
+   a given NAICS category gets the same emission factor regardless of whether
+   they're relatively efficient or wasteful, use renewable or fossil energy, etc.
+   The model cannot distinguish a genuinely low-carbon supplier from one that
+   simply sells inexpensive goods in a low-factor category.
+3. **Price differences distort intensity, independent of actual emissions.** Two
+   sellers moving physically identical products at different prices (discount vs.
+   premium pricing of the same good) get different `spend_usd_2022` denominators
+   for the same category factor, producing different `estimated_kg_co2e` even
+   though the actual production emissions are likely similar. A cheaper seller
+   isn't dirtier — intensity here is kg CO2e *per dollar*, not per unit.
+4. **The category-to-NAICS mapping is judgment-based**, not algorithmic — see
+   #3 above. A different, equally reasonable analyst would make different calls
+   on the weaker-fit categories.
+
+Additional limits surfaced during implementation, listed for the same reason the
+rest of this document lists them — not caveats to bury:
+
+5. **~1.9% of sellers (60 of 3,095) have zero resolvable product category**
+   (their `product_id` never joined to the `products` table at all — a
+   pre-existing data gap, not introduced by this phase) and get a NULL
+   `emissions_intensity`, not a fabricated 0. They're correctly excluded from the
+   swap-suggestion model (no category to match an alternative against) and from
+   the percentile windows in `gold_supplier_risk_emissions_score`.
+6. **The FX/CPI conversion uses one fixed 2018 reference point for all orders**,
+   including the 329 from 2016 and 45,101 from 2017 — see #4 above.
+7. **EPA v1.3.0 itself is a snapshot** (GHG data year 2022, published July 2024)
+   — it will go stale the same way any point-in-time reference dataset does;
+   nothing in this implementation re-pulls or re-validates it automatically.
+
+### 7. Swap-suggestion design: the three thresholds, and why they're vars
+
+`gold_supplier_emission_swap_suggestions` flags a supplier as "high-emission" at
+or above the `emissions_swap_threshold_percentile` (default 0.75 — top quartile)
+of intensity **within their own primary_category**, not a global threshold —
+what counts as "high" for perfumery and office furniture are very different
+absolute numbers, so a category-relative bar is the only one that's meaningful.
+An alternative must be no worse on `reliability_score` beyond
+`emissions_swap_risk_tolerance` (default 0 — strictly no worse) and have at least
+`emissions_swap_min_order_volume` (default 5) orders, so a supplier with a single
+lucky order can't surface as a "proven" low-emission alternative. All three are
+dbt vars specifically because they're policy knobs a stakeholder might reasonably
+want to move (a buyer willing to accept slightly worse reliability for a bigger
+emissions win would lower the tolerance's restrictiveness), not tuned model
+parameters like `gold_supplier_scorecard`'s reliability weights.
+
+**Likely interview question:** *"Why percentile rank for the blended score but a
+hardcoded min/max threshold (25/18.5%) for `gold_sourcing_cost_drivers`'
+freight-burden tiers back in Phase 1?"*
+**Answer, honestly:** Different problems. The freight tiers classify a small,
+already-filtered set of ~67 categories into three buckets off directly observed
+distribution quartiles — a one-time, inspectable cutoff is fine there. The
+emissions-risk blend combines two *continuous* scores from different units and
+different distributions (a 0-100 reliability score; a kg CO2e/USD figure spanning
+orders of magnitude) into one ranking across *all* 3,095 suppliers — outlier
+resistance matters much more at that scale and that heterogeneity.
+
+---
+
+## Phase 8 — real numbers (for citation)
+
+| Metric | Value |
+|---|---|
+| EPA emission factors seed | 1,016 rows (v1.3.0, GHG year 2022, published 2024-07-05) |
+| Category-to-NAICS mapping coverage | 73 of 73 real `product_category` values (100%), verified against the live DB, not assumed |
+| Order items with a resolvable emissions estimate | 111,047 of 112,650 (98.6%) |
+| Sellers with a NULL `emissions_intensity` | 60 of 3,095 (1.9%) — no resolvable product category |
+| Portfolio-wide estimated Scope 3 emissions | 647,994.4 kg CO2e, against $4,321,441.4 of 2022-USD-equivalent mapped spend |
+| Portfolio-average emissions intensity | ≈0.15 kg CO2e/USD |
+| `gold_supplier_risk_emissions_score` range | 0.0077 – 0.9489 |
+| Suppliers flagged as high-emission with a qualifying swap alternative | 585 |
+| Suppliers flagged high-emission with *no* qualifying alternative (produce no row) | not separately counted in this phase — a named gap, not a hidden one |
+| New dbt vars introduced | 7 (`brl_to_usd_rate`, `brl_to_usd_rate_year`, `cpi_2018_to_2022_adjustment`, `emissions_score_risk_weight`, `emissions_swap_threshold_percentile`, `emissions_swap_risk_tolerance`, `emissions_swap_min_order_volume`) — this project's first `vars:` block |
+| `dbt build` after this phase | PASS=81, WARN=0, ERROR=0, SKIP=0, NO-OP=0, TOTAL=81 (up from 61 before Phase 8) |
+| `pytest` after this phase | 29 passed, 0 failed (unchanged — this phase added no new Python code, only dbt + dashboard) |
+| CI fixture change required | Yes — `scripts/build_ci_fixture_db.py`'s two synthetic categories (`electronics_fixture`, `furniture_fixture`) were renamed to real Olist category names so `assert_all_categories_mapped` is a genuine check in CI, confirmed by rebuilding the fixture and re-running `dbt build` against it locally before relying on CI to catch it |
+
+---
+
+*This document now covers all eight phases. Any further work on this project should
 add a new dated section here rather than editing the phase sections above — those are
 a historical record of what was decided and why, not a living spec.*
