@@ -3,30 +3,43 @@
 Verified against live AWS resources, a fresh query of the local DuckDB file, the
 actual API/dashboard code, and real (non-mocked) calls — not against docstrings,
 dashboard captions, or prior documentation. Originally generated 2026-09-16;
-updated 2026-10-04 after the supplier emissions layer (Phase 8) and a round of
-accuracy fixes to the docs/dashboard.
+updated 2026-10-04 after the supplier emissions layer (Phase 8), a round of
+accuracy fixes to the docs/dashboard, and a production redeploy that fixed the
+AI Decision Assistant.
 
 ---
 
 ## 1. Deployment
 
 **Live:** `https://nczgm5fen7.us-east-2.awsapprunner.com`, AWS account `650126342842`,
-region `us-east-2`. Re-verified today, unchanged since the last report:
+region `us-east-2`. Re-verified fresh today:
 
-- `GET /health` → `200 {"status":"ok","db":"ok"}` — still working.
+- `GET /health` → `200 {"status":"ok","db":"ok"}` — working.
 - `GET /suppliers/?limit=2` → `200`, returns real scorecard rows. Working end to end.
-- `POST /decisions/ask` → still **`500 Internal Server Error`**.
+- `POST /decisions/ask` → **`200`, a real, data-grounded answer.** Tested fresh
+  just before writing this report: asked "How many total suppliers are there?",
+  got back "3,095" (matches `gold.gold_supplier_scorecard` exactly) with the real
+  SQL it ran and genuine extracted action items. **This endpoint is fixed and
+  working in production**, confirmed via a dedicated redeploy, not just a code fix
+  sitting uncommitted.
 
-**The AI agent's code-level bug is fixed, but production still isn't.** Since the
-last report, `agent/decision_agent.py`'s hardcoded model ID was repointed from the
-retired `claude-sonnet-4-20250514` to `claude-sonnet-5` (commit `de5d5bb`) and
-verified working end-to-end against the real Anthropic API in a clean local
-environment — it now returns a correct, data-grounded answer. **That fix has not
-been deployed.** Re-checked today: the live App Runner service's
-`RuntimeEnvironmentVariables` still has exactly 3 keys (`AWS_REGION`, `DUCKDB_PATH`,
-`DUCKDB_S3_URI`) — `ANTHROPIC_API_KEY` is still missing, and `terraform plan` still
-shows `1 to change` to add it back. The deployed Docker image also predates the
-model fix. Either gap alone would cause the 500 seen above.
+**What it took to actually ship this, and the gotcha worth remembering.**
+`agent/decision_agent.py`'s hardcoded model ID was repointed from the retired
+`claude-sonnet-4-20250514` to `claude-sonnet-5` (commit `de5d5bb`), the image was
+rebuilt with `docker buildx build --platform linux/amd64` (plain `docker build` on
+this arm64 Mac produces an image that crash-loops on App Runner) and pushed to
+ECR, then `terraform apply` added `ANTHROPIC_API_KEY` back to the service's
+`RuntimeEnvironmentVariables`. **That `terraform apply` alone was not enough** —
+App Runner's `UpdateService` call, when only the environment variables change (not
+the image identifier string itself, which is always the unchanged tag `:latest`),
+updates configuration without re-pulling the image. The service kept running the
+*old* container — confirmed via CloudWatch logs still throwing
+`anthropic.NotFoundError: model: claude-sonnet-4-20250514` after the apply
+succeeded. Fix: an explicit `aws apprunner start-deployment` after any
+config-only `terraform apply` forces App Runner to actually re-pull `:latest` and
+deploy it. **Any future deploy that only changes env vars (not the image tag)
+needs this same explicit `start-deployment` step, or it will silently keep
+serving the old image.**
 
 **Infra vs. Terraform state:** S3 bucket, ECR repo, both IAM roles, and the App
 Runner service are all in Terraform state and match AWS reality.
@@ -40,9 +53,8 @@ only, never applied.
 explicit entries, re-confirmed today via `git check-ignore`. The file was never
 actually committed, but is now correctly protected against being added by accident.
 
-**Not yet pushed:** all commits from this session (the emissions layer plus the
-docs/dashboard accuracy fixes) exist only on the local `main` branch as of this
-report — `git push origin main` has not been run yet.
+**Pushed:** the emissions layer, the docs/dashboard accuracy fixes, and this
+report's own prior revision are all on `origin/main` as of this report.
 
 ---
 
@@ -100,8 +112,8 @@ design (it's explicitly a point-in-time estimate, not a monitoring feed).
 | Trade-Partner Concentration (Comtrade) panel | **PARTIALLY WORKING** | Same caveat as before (hardcoded to reporter_code=76); the dashboard's own "(live)" mislabel is now fixed — relabeled "(batch, manual refresh)" and the header comment corrected |
 | `GET /suppliers/` and `/suppliers/{id}` | **WORKING** | Unchanged |
 | `GET /health` | **PARTIALLY WORKING — has a real bug** | Unchanged: top-level `status` is hardcoded `"ok"` regardless of the nested DB check result |
-| **AI Decision Assistant / `POST /decisions/ask`** | **BROKEN in production, FIXED in code** | The model-ID bug from the last report is fixed and verified working end-to-end locally (real Anthropic API call, correct data-grounded answer, matches `gold_executive_summary` exactly). Production is still broken — missing `ANTHROPIC_API_KEY` and running a stale image (§1) |
-| Dashboard's "Ask a question" widget | **BROKEN** (inherits the above) | Unchanged |
+| **AI Decision Assistant / `POST /decisions/ask`** | **WORKING** | Fixed in code (repointed to `claude-sonnet-5`) and now actually deployed to production — tested fresh today: `200`, a real Claude answer grounded in real SQL results, correct numbers (§1) |
+| Dashboard's "Ask a question" widget | **WORKING** (inherits the above) | Calls `/decisions/ask` over HTTP; now gets a real `200` response from production |
 | **Emissions tab — risk-vs-emissions scatter** | **WORKING** | Verified live in a browser: renders 3,035 suppliers, both "color by quadrant" and "color by primary category" toggle modes confirmed working, median reference lines render correctly |
 | **Emissions tab — swap suggestions table** | **WORKING** | Verified live in a browser against real data; 585 rows, matches the SQL-level verification exactly |
 | `gold_supplier_emissions` / `gold_supplier_risk_emissions_score` / `gold_supplier_emission_swap_suggestions` | **WORKING** | All three pass their dbt tests against the real DB; spot-checked numerically (rank ordering, constraint compliance on all 585 swap rows, NULL-handling for the 60 unmappable sellers) — see DECISIONS.md, Phase 8 |
@@ -111,8 +123,6 @@ design (it's explicitly a point-in-time estimate, not a monitoring feed).
 ## 4. Known issues / tech debt
 
 **Carried over, unchanged:**
-- Production `/decisions/ask` still broken (§1) — now for a narrower, fully
-  understood reason: missing env var + stale image, not an unfixed code bug.
 - `scripts/export_to_s3.py` only reads AWS credentials from env vars, not a
   profile.
 - Apple Silicon build trap (`docker build` without `--platform` produces an
@@ -127,6 +137,9 @@ design (it's explicitly a point-in-time estimate, not a monitoring feed).
   real DB check) — not fixed, still present.
 
 **Fixed since the last report:**
+- **`/decisions/ask` works in production** — fixed and deployed, not just fixed in
+  code. See §1 for the full redeploy story and the App Runner
+  config-only-apply-doesn't-re-pull-the-image gotcha it surfaced.
 - Region defaults (`us-east-1` → `us-east-2`) — fixed and verified.
 - `.gitignore` tfplan glob bug — fixed and verified (§1).
 - Dashboard's "Real-time risk intelligence" caption and the Comtrade panel's
