@@ -1,6 +1,8 @@
 # Supply Chain Decision Engine
 
-An end-to-end supply chain analytics platform — medallion lakehouse architecture on DuckDB, dbt transformations, and a FastAPI service — for global supply chain risk and trade-concentration analysis.
+**Objective: cut estimated Scope 3 emissions from a supplier base without raising late-delivery risk.**
+
+An end-to-end supply chain analytics platform — medallion lakehouse architecture on DuckDB, dbt transformations, and a FastAPI service — for global supply chain risk, trade-concentration, and supplier-emissions analysis.
 
 > **Studying this project for an interview?** Read [`DECISIONS.md`](DECISIONS.md) —
 > it documents every non-obvious engineering choice (why this metric formula and not
@@ -13,6 +15,7 @@ An end-to-end supply chain analytics platform — medallion lakehouse architectu
 | [Olist Brazilian E-Commerce](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce) | Orders, sellers, products, reviews, payments |
 | [UN Comtrade API](https://comtradeapi.un.org/) | Global trade flow data |
 | [World Bank LPI](https://lpi.worldbank.org/) | Logistics Performance Index by country |
+| [EPA Supply Chain GHG Emission Factors](https://catalog.data.gov/dataset/supply-chain-greenhouse-gas-emission-factors-v1-3-by-naics-6) | kg CO2e per 2022 USD, by 2017 NAICS-6 commodity code (v1.3.0) — feeds the emissions layer below |
 
 ## Architecture
 
@@ -42,6 +45,9 @@ DuckDB gold schema:
     gold_macro_context               — Brazil-specific macro backdrop (LPI + trade balance)
     gold_risk_score_validation       — out-of-sample backtest: does risk_tier predict future late deliveries?
     gold_executive_summary           — single-row portfolio KPI rollup
+    gold_supplier_emissions                 — per-seller estimated Scope 3 kg CO2e + emissions intensity
+    gold_supplier_risk_emissions_score      — reliability_score x emissions_intensity, percentile-blended
+    gold_supplier_emission_swap_suggestions — high-emission suppliers paired with a lower-emission alternative
     ↓
 FastAPI  (/suppliers — the CI-tested, verified path)
 Streamlit dashboard  (charts direct from DuckDB, CI-tested; Trade-Partner Concentration
@@ -65,6 +71,42 @@ pipeline's output at all (it shows a static synthetic example instead) — only 
 self-hosted deployment sharing the same DuckDB file as the Comtrade pipeline does,
 and only after that pipeline is actually run (manually, by default — see
 Orchestration below for what it would take to put it on an actual schedule).
+
+## Emissions Layer
+
+A spend-based Scope 3 (purchased-goods) estimate for every supplier, built on EPA's
+Supply Chain GHG Emission Factors (kg CO2e per 2022 USD, by NAICS-6 commodity): each
+of Olist's 73 real product categories is mapped to a NAICS code
+(`dbt/seeds/category_to_naics.csv`), order-item spend is converted from BRL to a
+2022-USD-equivalent (FX + CPI vars in `dbt/dbt_project.yml`), and multiplied by that
+category's emission factor. See `DECISIONS.md`, Phase 8, for the full methodology
+and its stated limits — most importantly, **these are US emission factors applied to
+Brazilian marketplace spend, a spend-based estimate (not activity-based), and the
+category-to-NAICS mapping is judgment-based.** This is not a measured emissions
+figure.
+
+```bash
+# Seeds (EPA factors + category mapping) load with everything else:
+cd dbt && dbt build && cd ..
+
+# Query the emissions-adjusted risk score directly:
+python3 -c "
+import duckdb
+conn = duckdb.connect('data/duckdb/supply_chain.duckdb', read_only=True)
+print(conn.execute('SELECT * FROM gold.gold_supplier_risk_emissions_score ORDER BY risk_emissions_score DESC LIMIT 10').fetchdf())
+"
+```
+
+**The swap-suggestions table** (`gold_supplier_emission_swap_suggestions`) is the
+actionable output: for each supplier in the top quartile of emissions intensity
+within their own product category (var `emissions_swap_threshold_percentile`,
+default 0.75), it finds the lowest-intensity same-category alternative that's no
+worse on `reliability_score` (var `emissions_swap_risk_tolerance`, default 0 — the
+"without raising late-delivery risk" constraint in this README's first line) and has
+enough order volume to be a plausible switch (var `emissions_swap_min_order_volume`,
+default 5). As of the last `dbt build`: 585 suppliers flagged with a qualifying
+alternative, reductions in the 25-45% range on spot-checked rows. Visible in the
+dashboard's **Emissions** tab, alongside a risk-vs-emissions scatter plot.
 
 ## Quickstart
 
@@ -169,6 +211,14 @@ setups above completely unaffected — cloud deployment is an additional target,
 replacement for any of them.
 
 ## Development
+
+Current test counts (`pytest tests/ --ignore=tests/test_agent.py` + `dbt build`,
+excludes the live-LLM smoke test — see note above):
+
+| Suite | Result |
+|---|---|
+| pytest | 29 passed |
+| dbt (seeds + models + data tests) | PASS=81, WARN=0, ERROR=0 (3 seeds, 21 models, 57 data tests) |
 
 ```bash
 # Lint
