@@ -19,7 +19,9 @@ An end-to-end supply chain analytics platform — medallion lakehouse architectu
 ```
 data/raw/ (Olist CSVs)          UN Comtrade API                    World Bank LPI API
     ↓  ingestion/load_bronze.py     ↓  ingestion/comtrade_pipeline.py   ↓  ingestion/world_bank_lpi.py
-    |                                (weekly via dags/comtrade_weekly_dag.py)
+    |                                (manual by default; dags/comtrade_weekly_dag.py defines a weekly
+    |                                 schedule, but only runs on one if you deploy Airflow yourself —
+    |                                 see Orchestration below. No Airflow instance is deployed today.)
 DuckDB bronze schema  (raw tables + _source_file, _loaded_at metadata; Comtrade
                         upserted/deduped on a natural key — see ingestion/comtrade.py)
     ↓  dbt silver models
@@ -43,7 +45,8 @@ DuckDB gold schema:
     ↓
 FastAPI  (/suppliers — the CI-tested, verified path)
 Streamlit dashboard  (charts direct from DuckDB, CI-tested; Trade-Partner Concentration
-                       section reflects whatever the weekly DAG last landed)
+                       section reflects whatever the Comtrade pipeline was last run
+                       against — manually, by default; see Orchestration below)
 ```
 
 An LLM-based decision agent (`agent/decision_agent.py`, a direct Anthropic SDK
@@ -57,9 +60,11 @@ checked. Treat that code as present, not as a proven capability.
 On Streamlit Community Cloud, `streamlit_app.py` bootstraps a synthetic database via
 `data/sample_data.py` instead of running dbt (Cloud can't run the real Kaggle-CSV
 pipeline) — see `DECISIONS.md` for why that duplication exists, and Phase 6 for why
-that means the *public* Cloud dashboard does not actually receive the weekly
-Comtrade pipeline's live output (it shows a static synthetic example instead) —
-only a self-hosted deployment sharing the same DuckDB file as the Airflow DAG does.
+that means the *public* Cloud dashboard does not actually receive the Comtrade
+pipeline's output at all (it shows a static synthetic example instead) — only a
+self-hosted deployment sharing the same DuckDB file as the Comtrade pipeline does,
+and only after that pipeline is actually run (manually, by default — see
+Orchestration below for what it would take to put it on an actual schedule).
 
 ## Quickstart
 
@@ -84,7 +89,8 @@ python -m ingestion.comtrade
 python -m ingestion.world_bank_lpi --countries BRA USA CHN DEU ARG
 
 # 4c. Optional: UN Comtrade partner-country breakdown (feeds gold_trade_concentration)
-#     — the pipeline the weekly Airflow DAG runs; safe to re-run (dedup on natural key)
+#     — the pipeline dags/comtrade_weekly_dag.py would run on a schedule if you deployed
+#     Airflow (see Orchestration below); run manually here, safe to re-run (dedup on natural key)
 python -m ingestion.comtrade_pipeline
 
 # 5. Run dbt silver + gold transformations (and run the test suite)
@@ -102,15 +108,16 @@ streamlit run dashboard/app.py
 
 ## Orchestration (Airflow)
 
-`dags/comtrade_weekly_dag.py` runs the Comtrade partner-breakdown pull on a weekly
-schedule, then refreshes dbt. Run it once manually without Airflow at all:
+`dags/comtrade_weekly_dag.py` defines a weekly schedule for the Comtrade
+partner-breakdown pull + dbt refresh — but no Airflow instance is deployed running
+it today; this is manual by default. Run it once without Airflow at all:
 
 ```bash
 python -m ingestion.comtrade_pipeline                      # default: Brazil + Argentina, 3 products
 python -m ingestion.comtrade_pipeline --reporters 76 --commodities 85 33
 ```
 
-For the real scheduled version, see [Docker](#docker) below —
+To actually run it on a schedule yourself, see [Docker](#docker) below —
 `docker-compose.airflow.yml` runs a self-hosted Airflow (scheduler + API server +
 Postgres). The DAG's actual task logic was validated by executing it for real
 against a temporary local Airflow 3.3.0 install (`airflow tasks test`, both tasks,
