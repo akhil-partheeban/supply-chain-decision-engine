@@ -74,7 +74,7 @@ def q(sql: str) -> pd.DataFrame:
 # ── Header ─────────────────────────────────────────────────────────────────────
 
 st.markdown("## 🚚 Supply Chain Decision Engine")
-st.caption("Real-time risk intelligence · Olist dataset · DuckDB gold layer")
+st.caption("Batch, refreshed manually · Olist dataset · DuckDB gold layer")
 st.divider()
 
 tab_risk, tab_emissions = st.tabs(["Risk & Concentration", "Emissions"])
