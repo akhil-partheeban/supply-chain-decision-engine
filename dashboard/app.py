@@ -381,16 +381,18 @@ with tab_risk:
 
     st.divider()
 
-    # ── 3c. Trade-Partner Concentration (UN Comtrade — live weekly pipeline) ───────
+    # ── 3c. Trade-Partner Concentration (UN Comtrade — manual pipeline) ────────────
     # Unlike every other section on this page (which reflects the last local
-    # `dbt build`), this section's underlying data is refreshed by
-    # dags/comtrade_weekly_dag.py on its own weekly schedule — re-running that pipeline
-    # (or `python -m ingestion.comtrade_pipeline`, manually) changes what renders here
-    # on the next page load, without touching this file. The "last refreshed" caption
-    # below exists specifically so that's visible, not just asserted.
+    # `dbt build`), this section's underlying data is refreshed by running
+    # ingestion/comtrade_pipeline.py — manually, by default. dags/comtrade_weekly_dag.py
+    # defines a weekly schedule for that same pipeline, but no Airflow instance is
+    # deployed running it anywhere today; nothing here refreshes on its own. Re-running
+    # the pipeline by hand changes what renders here on the next page load, without
+    # touching this file. The "last refreshed" caption below exists specifically so
+    # that's visible, not just asserted.
 
     st.markdown(
-        '<div class="section-header">Trade-Partner Concentration — UN Comtrade (live)</div>',
+        '<div class="section-header">Trade-Partner Concentration — UN Comtrade (batch, manual refresh)</div>',
         unsafe_allow_html=True,
     )
 
