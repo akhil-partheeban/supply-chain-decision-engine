@@ -5,6 +5,7 @@ import os
 import duckdb
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from api.routers import suppliers, decisions
 
@@ -35,4 +36,6 @@ def health():
         db_status = "ok"
     except Exception as exc:
         db_status = str(exc)
+    if db_status != "ok":
+        return JSONResponse(status_code=503, content={"status": "error", "db": db_status})
     return {"status": "ok", "db": db_status}
