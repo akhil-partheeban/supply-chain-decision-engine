@@ -63,3 +63,24 @@ models:
         tests:
           - unique
           - not_null
+
+  - name: epa_ghg_emission_factors
+    description: >
+      Seed: EPA Supply Chain GHG Emission Factors for US Industries and Commodities,
+      v1.3.0 (published 2024-07-05), pulled directly from
+      https://pasteur.epa.gov/uploads/10.23719/1531143/SupplyChainGHGEmissionFactors_v1.3.0_NAICS_CO2e_USD2022.csv
+      — not hand-typed or approximated. One row per 2017 NAICS-6 commodity code
+      (1,016 rows). Units are kg CO2e per 2022 USD of purchaser-price spend.
+      `factor_without_margins_kg_co2e_per_usd` is the producer-price emission
+      factor; `margins_kg_co2e_per_usd` adds wholesale/retail/transport margin
+      emissions; `factor_with_margins_kg_co2e_per_usd` (without + margins) is the
+      one used downstream, since Olist's order-item `price` is itself a
+      purchaser/retail price, not a producer price — see DECISIONS.md, Phase 8.
+    columns:
+      - name: naics_code
+        tests:
+          - unique
+          - not_null
+      - name: factor_with_margins_kg_co2e_per_usd
+        tests:
+          - not_null
