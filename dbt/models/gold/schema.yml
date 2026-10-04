@@ -95,6 +95,14 @@ models:
         tests:
           - not_null
 
+  - name: gold_supplier_emissions
+    description: One row per seller — estimated spend-based Scope 3 kg CO2e, emissions intensity (kg CO2e/USD, mapped-spend basis), primary_category (highest-spend category), and rank_in_category (by intensity, ascending).
+    columns:
+      - name: seller_id
+        tests:
+          - unique
+          - not_null
+
   - name: gold_risk_score_validation
     description: Out-of-sample backtest — risk_tier computed from pre-2018 orders, checked against actual 2018 late-delivery outcomes for the same sellers.
     columns:
