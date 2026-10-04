@@ -102,6 +102,11 @@ models:
         tests:
           - unique
           - not_null
+      - name: emissions_intensity
+        tests:
+          - accepted_range:
+              arguments:
+                min_value: 0
 
   - name: gold_supplier_risk_emissions_score
     description: One row per seller — reliability_score and emissions_intensity, each converted to a percent_rank() percentile, blended into risk_emissions_score (higher = better; var emissions_score_risk_weight controls the blend). NULL for the ~60 sellers with no resolvable emissions_intensity.
@@ -116,6 +121,7 @@ models:
     columns:
       - name: original_seller_id
         tests:
+          - unique
           - not_null
       - name: alternative_seller_id
         tests:

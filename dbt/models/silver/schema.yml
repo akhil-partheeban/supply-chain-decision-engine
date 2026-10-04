@@ -108,3 +108,6 @@ models:
       - name: factor_with_margins_kg_co2e_per_usd
         tests:
           - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
