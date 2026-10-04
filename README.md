@@ -56,12 +56,14 @@ Streamlit dashboard  (charts direct from DuckDB, CI-tested; Trade-Partner Concen
 ```
 
 An LLM-based decision agent (`agent/decision_agent.py`, a direct Anthropic SDK
-tool-calling loop against the gold layer) and a corresponding `/decisions/ask`
-endpoint and dashboard widget also exist in this repo. They're not covered by CI
-(`tests/test_agent.py` requires a live `ANTHROPIC_API_KEY` that isn't configured as a
-secret anywhere) and have never been verified end-to-end against a real Claude
-response — see `DECISIONS.md`, Phase 4 and Phase 7, for exactly what was and wasn't
-checked. Treat that code as present, not as a proven capability.
+tool-calling loop against the gold layer) backs a `/decisions/ask` endpoint and
+dashboard widget. It's verified working end-to-end against the real Anthropic API
+— both locally and deployed to production (`POST /decisions/ask` returns a real,
+data-grounded answer). It is **not** covered by CI, though
+(`tests/test_agent.py` requires a live `ANTHROPIC_API_KEY` that isn't configured as
+a repository secret — see `DECISIONS.md`, Phase 7, decision #8), so there's no
+automated regression protection if the model ID is retired again or the prompt
+drifts; manual verification is what's backing the "it works" claim here, not CI.
 
 On Streamlit Community Cloud, `streamlit_app.py` bootstraps a synthetic database via
 `data/sample_data.py` instead of running dbt (Cloud can't run the real Kaggle-CSV
