@@ -1,6 +1,6 @@
 # Supply Chain Decision Engine
 
-**Objective: cut estimated Scope 3 emissions from a supplier base without raising late-delivery risk.**
+**Objective: estimate Scope 3 emissions hotspots across a supplier base and show them alongside delivery risk.**
 
 An end-to-end supply chain analytics platform — medallion lakehouse architecture on DuckDB, dbt transformations, and a FastAPI service — for global supply chain risk, trade-concentration, and supplier-emissions analysis.
 
@@ -47,7 +47,7 @@ DuckDB gold schema:
     gold_executive_summary           — single-row portfolio KPI rollup
     gold_supplier_emissions                 — per-seller estimated Scope 3 kg CO2e + emissions intensity
     gold_supplier_risk_emissions_score      — reliability_score x emissions_intensity, percentile-blended
-    gold_supplier_emission_swap_suggestions — high-emission suppliers paired with a lower-emission alternative
+    gold_category_emissions_hotspot         — per-category total estimated kg CO2e, volume vs. intensity
     ↓
 FastAPI  (/suppliers — the CI-tested, verified path)
 Streamlit dashboard  (charts direct from DuckDB, CI-tested; Trade-Partner Concentration
@@ -99,16 +99,20 @@ print(conn.execute('SELECT * FROM gold.gold_supplier_risk_emissions_score ORDER 
 "
 ```
 
-**The swap-suggestions table** (`gold_supplier_emission_swap_suggestions`) is the
-actionable output: for each supplier in the top quartile of emissions intensity
-within their own product category (var `emissions_swap_threshold_percentile`,
-default 0.75), it finds the lowest-intensity same-category alternative that's no
-worse on `reliability_score` (var `emissions_swap_risk_tolerance`, default 0 — the
-"without raising late-delivery risk" constraint in this README's first line) and has
-enough order volume to be a plausible switch (var `emissions_swap_min_order_volume`,
-default 5). As of the last `dbt build`: 585 suppliers flagged with a qualifying
-alternative, reductions in the 25-45% range on spot-checked rows. Visible in the
-dashboard's **Emissions** tab, alongside a risk-vs-emissions scatter plot.
+**`gold_category_emissions_hotspot`** is the actionable output: which product
+categories contribute the most to total estimated Scope 3 emissions, from spend
+volume, category-level intensity, or both. As of the last `dbt build`, the top
+three are `bed_bath_table` (13.6% of total portfolio emissions), `health_beauty`
+(12.0%), and `sports_leisure` (8.1%). This is a portfolio sourcing/assortment-level
+view — it does **not** recommend switching any specific supplier for another. An
+earlier version of this layer (`gold_supplier_emission_swap_suggestions`) tried
+exactly that and was deleted: within a product category, emissions intensity turns
+out to differ between suppliers almost entirely because of what else each one
+happens to sell (secondary-category mix), not anything about how cleanly either one
+operates — see `DECISIONS.md`, Phase 9, for the investigation and the numbers
+behind that call. Visible in the dashboard's **Emissions** tab, alongside a
+risk-vs-emissions scatter plot (which itself now carries the same caveat for any
+per-supplier comparison).
 
 ## Quickstart
 
