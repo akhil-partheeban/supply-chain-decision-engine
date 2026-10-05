@@ -4,8 +4,10 @@ Verified against live AWS resources, a fresh query of the local DuckDB file, the
 actual API/dashboard code, and real (non-mocked) calls — not against docstrings,
 dashboard captions, or prior documentation. Originally generated 2026-09-16;
 updated 2026-10-04 after the supplier emissions layer (Phase 8), a round of
-accuracy fixes to the docs/dashboard, and a production redeploy that fixed the
-AI Decision Assistant.
+accuracy fixes to the docs/dashboard, a production redeploy that fixed the
+AI Decision Assistant, the `/health` bug fix, and a Phase 9 correction that
+deleted the swap-suggestions feature (it reflected product mix, not supplier
+practice) in favor of a category-level emissions hotspot view.
 
 ---
 
@@ -89,7 +91,7 @@ report's own prior revision are all on `origin/main` as of this report.
 | gold | gold_trade_concentration_shift | 573 | Comtrade partner-breakdown | Static |
 | gold | **gold_supplier_emissions** | 3,095 | Olist + EPA derived | Static; 60 of 3,095 sellers (1.9%) have a NULL `emissions_intensity` (no resolvable category) |
 | gold | **gold_supplier_risk_emissions_score** | 3,095 | Derived from the above + `gold_supplier_scorecard` | Static; same 60 sellers have a NULL score |
-| gold | **gold_supplier_emission_swap_suggestions** | 585 | Derived | Static — 585 suppliers flagged with a qualifying lower-emission alternative |
+| gold | **gold_category_emissions_hotspot** | 73 | Derived from `silver_order_item_emissions` | Static — one row per product category; `gold_supplier_emission_swap_suggestions` (585 rows) is deleted, see Phase 9 below |
 
 **Bottom line on "live" data:** unchanged from the last report — nothing in this
 system updates on its own. Olist is a one-time Kaggle dump. Comtrade and World
@@ -111,12 +113,12 @@ design (it's explicitly a point-in-time estimate, not a monitoring feed).
 | Sourcing Cost Drivers chart | **WORKING** | Unchanged |
 | Trade-Partner Concentration (Comtrade) panel | **PARTIALLY WORKING** | Same caveat as before (hardcoded to reporter_code=76); the dashboard's own "(live)" mislabel is now fixed — relabeled "(batch, manual refresh)" and the header comment corrected |
 | `GET /suppliers/` and `/suppliers/{id}` | **WORKING** | Unchanged |
-| `GET /health` | **PARTIALLY WORKING — has a real bug** | Unchanged: top-level `status` is hardcoded `"ok"` regardless of the nested DB check result |
+| `GET /health` | **WORKING** | Fixed since the last report — top-level `status` now reflects the real DB check (returns 503 + `status: error` if it fails, instead of a hardcoded `ok`). Two new pytest cases cover both paths |
 | **AI Decision Assistant / `POST /decisions/ask`** | **WORKING** | Fixed in code (repointed to `claude-sonnet-5`) and now actually deployed to production — tested fresh today: `200`, a real Claude answer grounded in real SQL results, correct numbers (§1) |
 | Dashboard's "Ask a question" widget | **WORKING** (inherits the above) | Calls `/decisions/ask` over HTTP; now gets a real `200` response from production |
-| **Emissions tab — risk-vs-emissions scatter** | **WORKING** | Verified live in a browser: renders 3,035 suppliers, both "color by quadrant" and "color by primary category" toggle modes confirmed working, median reference lines render correctly |
-| **Emissions tab — swap suggestions table** | **WORKING** | Verified live in a browser against real data; 585 rows, matches the SQL-level verification exactly |
-| `gold_supplier_emissions` / `gold_supplier_risk_emissions_score` / `gold_supplier_emission_swap_suggestions` | **WORKING** | All three pass their dbt tests against the real DB; spot-checked numerically (rank ordering, constraint compliance on all 585 swap rows, NULL-handling for the 60 unmappable sellers) — see DECISIONS.md, Phase 8 |
+| **Emissions tab — risk-vs-emissions scatter** | **WORKING** | Verified live in a browser: renders 3,035 suppliers, both "color by quadrant" and "color by primary category" toggle modes confirmed working, median reference lines render correctly. Now carries an explicit caption that intensity differences reflect product mix, not supplier practice (Phase 9) |
+| **Emissions tab — category emissions hotspot chart** | **WORKING** | Replaces the deleted swap-suggestions table (Phase 9). Verified live in a browser: horizontal bar chart (volume) colored by category intensity renders correctly — e.g. `stationery`/`office_furniture` visibly show short, dark-red bars (high intensity, lower volume), confirming the color encoding works as intended; full-breakdown expander table also verified |
+| `gold_supplier_emissions` / `gold_supplier_risk_emissions_score` / `gold_category_emissions_hotspot` | **WORKING** | All three pass their dbt tests against the real DB; the hotspot model's category percentages sum to ~100% as a sanity check, and its per-category intensity values match the EPA factors by construction |
 
 ---
 
@@ -133,13 +135,16 @@ design (it's explicitly a point-in-time estimate, not a monitoring feed).
   an isolated virtualenv.
 - `test_agent.py` still has zero CI coverage (unchanged — still a live smoke test
   requiring a real key not configured as a CI secret).
-- `api/main.py`'s `/health` endpoint bug (top-level `status` doesn't reflect the
-  real DB check) — not fixed, still present.
 
 **Fixed since the last report:**
 - **`/decisions/ask` works in production** — fixed and deployed, not just fixed in
   code. See §1 for the full redeploy story and the App Runner
   config-only-apply-doesn't-re-pull-the-image gotcha it surfaced.
+- **`api/main.py`'s `/health` endpoint bug is fixed** — top-level `status` now
+  reflects the real DB check (503 + `status: error` on failure, instead of a
+  hardcoded `ok`). Two new pytest cases cover it.
+- **`gold_supplier_emission_swap_suggestions` is deleted, table and all** — see
+  Phase 9 below.
 - Region defaults (`us-east-1` → `us-east-2`) — fixed and verified.
 - `.gitignore` tfplan glob bug — fixed and verified (§1).
 - Dashboard's "Real-time risk intelligence" caption and the Comtrade panel's
@@ -148,19 +153,30 @@ design (it's explicitly a point-in-time estimate, not a monitoring feed).
   pipeline — corrected to state plainly that no Airflow instance is deployed
   running it; every refresh to date has been manual.
 
-**New with the emissions layer (Phase 8) — honest limits, not bugs:**
+**Phase 9 — a correction, not a new limit:** `gold_supplier_emission_swap_suggestions`
+(Phase 8) was deleted because its core claim was wrong, not merely limited. Within
+a product category, emissions intensity turns out to differ between suppliers
+almost entirely because of secondary-category product mix, not anything about how
+cleanly either one operates — verified directly: single-category sellers in the
+same category land within ~0.00001–0.00003 of each other (rounding noise only),
+and 1,637 of 3,035 sellers (54%) tie exactly with another seller in the same
+category. Replaced with `gold_category_emissions_hotspot`, a portfolio-level view
+that makes no claim about any individual supplier. See DECISIONS.md, Phase 9.
+
+**Still true from the emissions layer (Phase 8) — honest limits, not bugs:**
 - US EPA emission factors applied to Brazilian marketplace spend — the single
   largest source of error in the emissions estimate (see DECISIONS.md, Phase 8,
-  §6, for the full list of four-plus limits: spend-based method, price-distorts-
-  intensity, judgment-based category mapping, the 60-seller gap, and the
-  single-fixed-year FX/CPI conversion applied uniformly across 2016-2018 orders).
+  §6, for the full list of limits: spend-based method, price-distorts-intensity,
+  judgment-based category mapping, the 60-seller gap, and the single-fixed-year
+  FX/CPI conversion applied uniformly across 2016-2018 orders).
 - This is a spend-based Scope 3 *estimate*, not measured emissions data — stated
   directly in the dashboard caption and the README.
 
 **Test suite, current and verified fresh (not copied from a prior run):**
-- `pytest tests/ --ignore=tests/test_agent.py`: **29 passed**.
-- `dbt build`: **PASS=81, WARN=0, ERROR=0, SKIP=0, NO-OP=0, TOTAL=81** — 3 seeds,
-  21 models, 57 data tests. (Previous report: 17 models, 39 tests, pre-emissions.)
+- `pytest tests/ --ignore=tests/test_agent.py`: **31 passed**.
+- `dbt build`: **PASS=82, WARN=0, ERROR=0, SKIP=0, NO-OP=0, TOTAL=82** — 3 seeds,
+  21 models, 58 data tests. (Previous report: 81 total, 22 models — one model
+  deleted, two new `/health` tests added.)
 
 ---
 
