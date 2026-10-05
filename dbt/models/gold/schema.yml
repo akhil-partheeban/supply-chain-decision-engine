@@ -116,6 +116,20 @@ models:
           - unique
           - not_null
 
+  - name: gold_category_emissions_hotspot
+    description: One row per product category — total estimated Scope 3 kg CO2e, total spend, seller count, category_emissions_intensity (the category's own EPA factor, shown for reference), and each category's % share of total portfolio emissions. Aggregated from order-item grain, not from any single seller's primary_category, so secondary-category spend isn't undercounted. See DECISIONS.md, Phase 9.
+    columns:
+      - name: product_category
+        tests:
+          - unique
+          - not_null
+      - name: total_estimated_kg_co2e
+        tests:
+          - not_null
+          - accepted_range:
+              arguments:
+                min_value: 0
+
   - name: gold_supplier_emission_swap_suggestions
     description: One row per high-emission supplier (top quartile of intensity within primary_category, var-controlled) that has at least one qualifying same-category, lower-emission, no-worse-risk, sufficient-volume alternative. Flagged suppliers with no qualifying alternative produce no row.
     columns:

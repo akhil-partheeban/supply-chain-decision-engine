@@ -667,60 +667,101 @@ with tab_emissions:
             f"gold_supplier_emissions.pct_spend_mapped). Dotted lines mark the "
             f"median on each axis."
         )
+        st.caption(
+            "⚠️ Within a product category, emissions_intensity differs between "
+            "suppliers almost entirely because of *secondary*-category product "
+            "mix, not supplier-specific practices — a single-category seller's "
+            "intensity is just that category's EPA factor, full stop. See "
+            "DECISIONS.md, Phase 9. Treat intensity differences between two "
+            "suppliers here as a reflection of what else they sell, not as "
+            "evidence one sources or ships more cleanly than the other."
+        )
     else:
         st.info("No supplier emissions data found. Run `dbt build` first.")
 
     st.divider()
 
     st.markdown(
-        '<div class="section-header">Emission Swap Suggestions</div>',
+        '<div class="section-header">Emissions Hotspots by Category</div>',
         unsafe_allow_html=True,
     )
     st.caption(
-        "High-emission suppliers (top quartile of intensity within their own "
-        "product category) paired with the lowest-intensity same-category "
-        "alternative that's no worse on reliability and has enough order volume "
-        "to be a plausible switch. estimated_kg_co2e_reduction is a what-if — "
-        "redirecting the original's own spend to the alternative's intensity — "
-        "not a measured reduction."
+        "Which product categories contribute the most to total estimated "
+        "Scope 3 emissions — from spend volume, category-level carbon "
+        "intensity, or both. This is the level spend-based estimates are "
+        "actually suited to (portfolio sourcing/assortment decisions), not "
+        "a per-supplier recommendation — see DECISIONS.md, Phase 9."
     )
 
-    swap_df = q("""
+    hotspot_df = q("""
         SELECT
-            original_seller_id, primary_category, original_intensity,
-            original_reliability_score, alternative_seller_id, alternative_intensity,
-            alternative_reliability_score, alternative_total_orders,
-            estimated_pct_emissions_reduction, estimated_kg_co2e_reduction
-        FROM gold.gold_supplier_emission_swap_suggestions
-        ORDER BY estimated_kg_co2e_reduction DESC
-        LIMIT 25
+            product_category, total_items, seller_count, total_spend_usd,
+            total_estimated_kg_co2e, category_emissions_intensity,
+            pct_of_portfolio_emissions, emissions_rank
+        FROM gold.gold_category_emissions_hotspot
+        ORDER BY emissions_rank
+        LIMIT 15
     """)
 
-    if not swap_df.empty:
-        st.dataframe(
-            swap_df.rename(columns={
-                "original_seller_id": "Original Seller",
-                "primary_category": "Category",
-                "original_intensity": "Original Intensity",
-                "original_reliability_score": "Original Reliability",
-                "alternative_seller_id": "Alternative Seller",
-                "alternative_intensity": "Alt. Intensity",
-                "alternative_reliability_score": "Alt. Reliability",
-                "alternative_total_orders": "Alt. Orders",
-                "estimated_pct_emissions_reduction": "Est. Reduction %",
-                "estimated_kg_co2e_reduction": "Est. kg CO2e Saved",
-            }),
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Original Intensity": st.column_config.NumberColumn(format="%.4f"),
-                "Alt. Intensity": st.column_config.NumberColumn(format="%.4f"),
-                "Est. Reduction %": st.column_config.NumberColumn(format="%.1f%%"),
-                "Est. kg CO2e Saved": st.column_config.NumberColumn(format="%.1f"),
-            },
+    if not hotspot_df.empty:
+        fig6 = go.Figure(go.Bar(
+            x=hotspot_df["total_estimated_kg_co2e"],
+            y=hotspot_df["product_category"],
+            orientation="h",
+            marker=dict(
+                color=hotspot_df["category_emissions_intensity"],
+                colorscale="OrRd",
+                colorbar=dict(title="Intensity<br>(kg CO2e/USD)"),
+            ),
+            text=hotspot_df["pct_of_portfolio_emissions"].apply(lambda v: f"{v:.1f}%"),
+            textposition="outside",
+            hovertemplate=(
+                "<b>%{y}</b><br>Total est. kg CO2e: %{x:,.0f}"
+                "<br>Share of portfolio: %{text}<extra></extra>"
+            ),
+        ))
+        fig6.update_layout(
+            xaxis_title="Total Estimated kg CO2e",
+            yaxis_title=None,
+            plot_bgcolor="white", paper_bgcolor="white",
+            margin=dict(t=20, b=40, l=10, r=20),
+            height=460,
+            font=dict(family="sans-serif", size=12),
+            yaxis=dict(autorange="reversed", showgrid=False),
+            xaxis=dict(showgrid=True, gridcolor="#f1f5f9"),
+            showlegend=False,
         )
+        st.plotly_chart(fig6, use_container_width=True)
+        st.caption(
+            "Top 15 of 73 categories by total estimated kg CO2e. Bar length = "
+            "volume contribution; color = that category's own emissions "
+            "intensity (its EPA factor). A long, dark bar is a hotspot on both "
+            "counts; a long, light bar is a hotspot from spend volume alone."
+        )
+
+        with st.expander("Full category breakdown"):
+            st.dataframe(
+                hotspot_df.rename(columns={
+                    "product_category": "Category",
+                    "total_items": "Order Items",
+                    "seller_count": "Sellers",
+                    "total_spend_usd": "Total Spend (USD)",
+                    "total_estimated_kg_co2e": "Total Est. kg CO2e",
+                    "category_emissions_intensity": "Intensity",
+                    "pct_of_portfolio_emissions": "% of Portfolio",
+                    "emissions_rank": "Rank",
+                }),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Total Spend (USD)": st.column_config.NumberColumn(format="$%.0f"),
+                    "Total Est. kg CO2e": st.column_config.NumberColumn(format="%.1f"),
+                    "Intensity": st.column_config.NumberColumn(format="%.4f"),
+                    "% of Portfolio": st.column_config.NumberColumn(format="%.2f%%"),
+                },
+            )
     else:
-        st.info("No swap suggestions found. Run `dbt build` first.")
+        st.info("No category emissions data found. Run `dbt build` first.")
 
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
