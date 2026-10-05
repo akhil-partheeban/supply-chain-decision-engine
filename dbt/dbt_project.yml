@@ -61,14 +61,3 @@ vars:
   # the two always sum to 1 rather than being independently tunable and able to
   # drift apart.
   emissions_score_risk_weight: 0.5
-
-  # Swap suggestions (gold_supplier_emission_swap_suggestions):
-  #   - a supplier is "high-emission" if their emissions_intensity is at or above
-  #     this percentile *within their own primary_category* (0.75 = top quartile).
-  emissions_swap_threshold_percentile: 0.75
-  #   - an alternative supplier's reliability_score must be no worse than the
-  #     original's by more than this many points (0 = no worse at all).
-  emissions_swap_risk_tolerance: 0
-  #   - an alternative must have at least this many total_orders, so the
-  #     suggestion is a plausible sourcing switch, not a one-order fluke.
-  emissions_swap_min_order_volume: 5
