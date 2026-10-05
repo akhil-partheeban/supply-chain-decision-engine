@@ -73,8 +73,19 @@ def q(sql: str) -> pd.DataFrame:
 
 # ── Header ─────────────────────────────────────────────────────────────────────
 
+DEMO_MODE = os.getenv("DEMO_MODE") == "1"
+
+if DEMO_MODE:
+    st.warning(
+        "Demo mode: synthetic sample data, not the real pipeline.",
+        icon="⚠️",
+    )
+
 st.markdown("## 🚚 Supply Chain Decision Engine")
-st.caption("Batch, refreshed manually · Olist dataset · DuckDB gold layer")
+st.caption(
+    "Batch, refreshed manually · DuckDB gold layer" if DEMO_MODE
+    else "Batch, refreshed manually · Olist dataset · DuckDB gold layer"
+)
 st.divider()
 
 tab_risk, tab_emissions = st.tabs(["Risk & Concentration", "Emissions"])
@@ -769,6 +780,11 @@ with tab_emissions:
 st.markdown(
     "<br><center><small style='color:#94a3b8'>"
     "Supply Chain Decision Engine · DuckDB medallion lakehouse · gold layer"
+    "<br>Built on the "
+    '<a href="https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce" '
+    'style="color:#94a3b8">Brazilian E-Commerce Public Dataset by Olist</a>, '
+    "licensed CC BY-NC-SA 4.0. Data shown here is aggregated and used for "
+    "non-commercial, educational purposes only."
     "</small></center>",
     unsafe_allow_html=True,
 )

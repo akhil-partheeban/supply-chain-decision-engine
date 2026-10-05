@@ -1,10 +1,20 @@
 """
 Streamlit Cloud entry point for the Supply Chain Decision Engine.
 
-On first run (no DuckDB file present) the sample data generator builds a
-synthetic database automatically so the dashboard works without the real
-Kaggle CSVs.  Subsequent runs skip the build step and go straight to the
-dashboard.
+Three possible data sources, tried in this order:
+  1. A real local DB already exists at DUCKDB_PATH (e.g. local dev, Docker) —
+     used as-is, untouched by anything below. This is the real-DB path and
+     nothing in this file should change its behavior.
+  2. No real DB, but data/demo/gold_snapshot.duckdb is committed to the repo
+     (gold schema only — 14 tables, no bronze/silver, no raw Olist rows) —
+     used directly. This is what Streamlit Community Cloud serves: real
+     pipeline output, not synthetic data, with no AWS credentials or network
+     fetch required (the snapshot is a committed file). See README.md and
+     DECISIONS.md for why a gold-only snapshot, and the Olist dataset's
+     CC BY-NC-SA 4.0 attribution.
+  3. Neither exists — the sample data generator builds a synthetic database
+     so the dashboard still works. dashboard/app.py shows a demo-mode banner
+     whenever this path is taken, via the DEMO_MODE env var set below.
 """
 
 import os
@@ -17,13 +27,18 @@ sys.path.insert(0, str(ROOT))
 
 # ── Resolve DB path and propagate as an absolute path ─────────────────────────
 _default_db = ROOT / "data" / "duckdb" / "supply_chain.duckdb"
+_gold_snapshot = ROOT / "data" / "demo" / "gold_snapshot.duckdb"
 DB_PATH = os.getenv("DUCKDB_PATH", str(_default_db))
-os.environ["DUCKDB_PATH"] = DB_PATH  # dashboard reads this env var
 
-# ── Bootstrap sample data if the database doesn't exist ───────────────────────
 if not Path(DB_PATH).exists():
-    from data.sample_data import build_sample_db  # noqa: E402
-    build_sample_db(DB_PATH)
+    if _gold_snapshot.exists():
+        DB_PATH = str(_gold_snapshot)
+    else:
+        from data.sample_data import build_sample_db  # noqa: E402
+        build_sample_db(DB_PATH)
+        os.environ["DEMO_MODE"] = "1"
+
+os.environ["DUCKDB_PATH"] = DB_PATH  # dashboard reads this env var
 
 # ── Hand off to the dashboard (runs in this module's global scope) ─────────────
 _dashboard = ROOT / "dashboard" / "app.py"
