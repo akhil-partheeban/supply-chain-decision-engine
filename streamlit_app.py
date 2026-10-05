@@ -6,11 +6,13 @@ Three possible data sources, tried in this order:
      used as-is, untouched by anything below. This is the real-DB path and
      nothing in this file should change its behavior.
   2. No real DB, but data/demo/gold_snapshot.duckdb is committed to the repo
-     (gold schema only — 14 tables, no bronze/silver, no raw Olist rows) —
+     (all 14 gold tables, plus silver.silver_comtrade_partner_flows — the one
+     silver table the dashboard queries directly, for the Trade-Partner
+     Concentration panel's freshness caption; no bronze, no raw Olist rows) —
      used directly. This is what Streamlit Community Cloud serves: real
      pipeline output, not synthetic data, with no AWS credentials or network
      fetch required (the snapshot is a committed file). See README.md and
-     DECISIONS.md for why a gold-only snapshot, and the Olist dataset's
+     DECISIONS.md for why this snapshot shape, and the Olist dataset's
      CC BY-NC-SA 4.0 attribution.
   3. Neither exists — the sample data generator builds a synthetic database
      so the dashboard still works. dashboard/app.py shows a demo-mode banner

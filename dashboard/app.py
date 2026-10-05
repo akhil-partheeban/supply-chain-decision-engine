@@ -558,46 +558,63 @@ with tab_risk:
         unsafe_allow_html=True,
     )
 
-    API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+    # No FastAPI backend runs inside the Streamlit Cloud process, so this widget
+    # can only work there if API_BASE_URL is explicitly set to a real deployed API
+    # (a Cloud secret/env var override) — not its localhost:8000 default, which is
+    # meaningless on Cloud. DB_PATH ending in the committed snapshot, or DEMO_MODE,
+    # both mean "not a real local/Docker dev environment" — hide the widget there
+    # instead of showing a text box that will always fail with a connection error.
+    _api_explicitly_configured = "API_BASE_URL" in os.environ
+    _running_off_snapshot_or_demo = DEMO_MODE or DB_PATH.endswith("gold_snapshot.duckdb")
 
-    question = st.text_input(
-        label="Ask a supply chain question",
-        placeholder="e.g. Which sellers are highest risk? Where is our concentration risk?",
-    )
-
-    if question:
-        with st.spinner("Asking the decision agent..."):
-            try:
-                resp = requests.post(
-                    f"{API_BASE_URL}/decisions/ask",
-                    json={"question": question},
-                    timeout=60,
-                )
-                resp.raise_for_status()
-                result = resp.json()
-            except requests.exceptions.RequestException as exc:
-                result = None
-                st.error(
-                    f"⚠️ Could not reach the decision agent at `{API_BASE_URL}` — "
-                    f"is the API running? ({exc})"
-                )
-
-        if result:
-            st.markdown(f"**Answer:**\n\n{result.get('answer', '')}")
-
-            action_items = result.get("action_items") or []
-            if action_items:
-                st.markdown("**Suggested actions:**")
-                for item in action_items:
-                    st.markdown(f"- {item}")
-
-            sql_used = result.get("sql_used") or []
-            if sql_used:
-                with st.expander(f"SQL the agent ran ({len(sql_used)} quer{'y' if len(sql_used) == 1 else 'ies'})"):
-                    for i, sql in enumerate(sql_used, 1):
-                        st.code(sql.strip(), language="sql")
+    if _running_off_snapshot_or_demo and not _api_explicitly_configured:
+        st.info(
+            "AI Decision Assistant isn't available in this deployment — it needs a "
+            "live FastAPI backend (`API_BASE_URL`), which isn't running alongside "
+            "this snapshot/demo dashboard. Run the full stack locally to use it — "
+            "see README.md Quickstart."
+        )
     else:
-        st.caption("Ask a question above to query the decision agent.")
+        API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+
+        question = st.text_input(
+            label="Ask a supply chain question",
+            placeholder="e.g. Which sellers are highest risk? Where is our concentration risk?",
+        )
+
+        if question:
+            with st.spinner("Asking the decision agent..."):
+                try:
+                    resp = requests.post(
+                        f"{API_BASE_URL}/decisions/ask",
+                        json={"question": question},
+                        timeout=60,
+                    )
+                    resp.raise_for_status()
+                    result = resp.json()
+                except requests.exceptions.RequestException as exc:
+                    result = None
+                    st.error(
+                        f"⚠️ Could not reach the decision agent at `{API_BASE_URL}` — "
+                        f"is the API running? ({exc})"
+                    )
+
+            if result:
+                st.markdown(f"**Answer:**\n\n{result.get('answer', '')}")
+
+                action_items = result.get("action_items") or []
+                if action_items:
+                    st.markdown("**Suggested actions:**")
+                    for item in action_items:
+                        st.markdown(f"- {item}")
+
+                sql_used = result.get("sql_used") or []
+                if sql_used:
+                    with st.expander(f"SQL the agent ran ({len(sql_used)} quer{'y' if len(sql_used) == 1 else 'ies'})"):
+                        for i, sql in enumerate(sql_used, 1):
+                            st.code(sql.strip(), language="sql")
+        else:
+            st.caption("Ask a question above to query the decision agent.")
 
 with tab_emissions:
     st.markdown(
