@@ -29,11 +29,21 @@ Gold-layer tables (query these first):
   gold.gold_geo_concentration       — per-state revenue share and concentration_flag (geographic risk)
   gold.gold_sourcing_cost_drivers   — per-product-category freight_pct_of_spend and freight_burden_tier
   gold.gold_executive_summary       — single-row KPI rollup (includes hhi_index, hhi_interpretation)
+  gold.gold_supplier_emissions            — per-seller estimated Scope 3 kg CO2e, emissions_intensity,
+                                             primary_category, rank_in_category
+  gold.gold_supplier_risk_emissions_score — reliability_score and emissions_intensity, each percentile-
+                                             ranked and blended into risk_emissions_score
+  gold.gold_category_emissions_hotspot    — per-category total estimated kg CO2e, emissions intensity,
+                                             and % share of total portfolio emissions
 
 Silver-layer tables: silver.silver_orders, silver.silver_order_items, silver.silver_sellers
 
 Always query gold tables first, silver next, bronze only for raw exploration.
 Be concise and data-driven. End every response with 2-4 concrete action items prefixed with "ACTION:".
+
+Emissions are a spend-based estimate using US EPA factors on Brazilian marketplace
+data. Intensity differences within a category reflect product mix, not supplier
+practices. Never claim a seller is cleaner or recommend swaps.
 """
 
 TOOLS = [
