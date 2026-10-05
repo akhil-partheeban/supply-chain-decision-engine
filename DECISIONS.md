@@ -2813,6 +2813,110 @@ resistance matters much more at that scale and that heterogeneity.
 
 ---
 
-*This document now covers all eight phases. Any further work on this project should
+## Phase 9 — Correction: Swap Suggestions Reflected Product Mix, Not Supplier Practice
+
+### 1. The finding
+
+Read-only investigation into `gold_supplier_emission_swap_suggestions` (Phase 8)
+asked a basic question that should have been asked before shipping it: *within one
+product category, why does emissions intensity differ from seller to seller at
+all?* `category_to_naics` maps each category to exactly one NAICS code, and each
+NAICS code has exactly one EPA factor — so a seller who sells in *only one*
+category should get an intensity numerically equal to that category's factor,
+full stop. There is no mechanism in this methodology for two single-category
+sellers in the same category to differ, other than floating-point rounding.
+
+Checked directly against the real data, split by whether a seller sells in one
+category or several (`gold_supplier_scorecard.unique_categories`):
+
+| Category | Single-category sellers' spread | Overall spread (incl. multi-category) |
+|---|---:|---:|
+| sports_leisure | 0.000025 | 0.132355 |
+| bed_bath_table | 0.000015 | 0.127279 |
+| health_beauty | 0.000016 | 0.100525 |
+| housewares | 0.000012 | 0.088405 |
+| auto | 0.000024 | 0.087359 |
+
+Single-category sellers in the same category land within ~0.00001–0.00003 of each
+other — rounding noise from the per-item `ROUND(..., 4)` calls in
+`silver_order_item_emissions`, nothing more. The *overall* spread, once
+multi-category sellers are included, is **3,000–8,000x larger**. Directly
+confirming this: **1,637 of 3,035 sellers with a resolvable intensity (54%) tie
+exactly with at least one other seller in the same category**, across 174
+distinct tie groups — the single-category sellers collapsing onto one shared
+value, exactly as the methodology predicts.
+
+**What this means in plain terms.** A multi-category seller's `emissions_intensity`
+is a spend-weighted blend of their primary category's factor and whatever *other*
+categories they also happen to sell in. Two sellers both primarily selling
+`sports_leisure` can show meaningfully different intensity not because one runs a
+cleaner operation than the other, but because one also sells electronics on the
+side and the other also sells apparel. `gold_supplier_emission_swap_suggestions`
+(Phase 8) searched for "the lowest-intensity same-category alternative" and
+presented the gap as an achievable emissions reduction from switching suppliers.
+That framing was wrong: the measured gap is overwhelmingly a product-mix artifact,
+not a signal that the alternative supplier sources or ships more cleanly within
+that category. A buyer "switching" from the original to the suggested alternative
+gets a different product mix, not necessarily a cleaner one.
+
+### 2. What was done about it
+
+`gold_supplier_emission_swap_suggestions` is **deleted** — the model file, its
+`schema.yml` entry and tests, and the three `emissions_swap_*` dbt vars that
+controlled it. Not relabeled, not kept-but-hidden: a table named
+`*_swap_suggestions` with a column called `estimated_kg_co2e_reduction` sitting in
+the warehouse is itself a latent claim, queryable by anyone who opens the database
+directly regardless of what the dashboard shows.
+
+In its place: `gold_category_emissions_hotspot`, which asks the question this
+methodology can actually answer — not "which specific supplier should you switch
+to," but "which product categories contribute the most to total estimated
+spend-based emissions, and why" (volume, category-level intensity, or both). This
+is squarely within what a spend-based estimate is good for: portfolio-level
+category hotspotting, the same level of aggregation `gold_sourcing_cost_drivers`
+(Phase 1) already uses for freight-burden analysis. It does not claim anything
+about any individual supplier's practices.
+
+The dashboard's risk-vs-emissions scatter plot (still per-supplier) now carries an
+explicit caption stating that emissions intensity reflects product mix, not
+supplier practice — the same honest framing, applied where the per-supplier view
+is still shown.
+
+**Likely interview question:** *"How did a backwards claim like this ship in
+Phase 8 in the first place?"*
+**Answer:** The underlying SQL was correct and heavily tested — `rank_in_category`,
+the non-equi self-join, the risk/volume constraints all worked exactly as
+specified. What was never tested was the *interpretive* claim sitting on top of
+correct SQL: that a within-category intensity gap represents something
+actionable about the alternative supplier specifically. Phase 8's own limits
+section named "price differences distort intensity" and "the category-to-NAICS
+mapping is judgment-based" as risks, but didn't carry those risks through to their
+logical conclusion for the swap-suggestion feature specifically. The fix here
+isn't "test more" in the abstract — it's the same discipline this document keeps
+returning to: before shipping a comparison between two entities, ask what
+specifically could make them differ under the methodology, and check whether that
+mechanism is actually present in the data. It wasn't.
+
+### 3. What this does and doesn't invalidate
+
+**Still valid, unaffected by this finding:** `gold_supplier_emissions` (the
+per-seller spend, intensity, and primary-category rollup itself),
+`gold_supplier_risk_emissions_score` (the percentile-blended score — it compares
+each seller to the full population's distribution, not to a hand-picked
+"alternative" within their category), the scatter plot, and every other
+Phase 8 model and limit. The problem was specific to treating an in-category
+pairwise comparison as an actionable recommendation — not the underlying spend
+and intensity calculations, which are correct as far as a spend-based method goes.
+
+**What it does invalidate:** any claim that this project can recommend *which
+supplier* to switch to for a lower-emissions outcome. It cannot, with spend-based
+data alone, at the category-of-73 granularity this mapping uses. A genuinely valid
+version of that claim would need product-level (not category-level) emission
+factors, or activity-based data — neither of which this dataset provides (see
+Phase 8, §2, on why spend-based was the only honest option available here).
+
+---
+
+*This document now covers all nine phases. Any further work on this project should
 add a new dated section here rather than editing the phase sections above — those are
 a historical record of what was decided and why, not a living spec.*
