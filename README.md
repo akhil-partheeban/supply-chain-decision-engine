@@ -17,6 +17,14 @@ An end-to-end supply chain analytics platform — medallion lakehouse architectu
 | [World Bank LPI](https://lpi.worldbank.org/) | Logistics Performance Index by country |
 | [EPA Supply Chain GHG Emission Factors](https://catalog.data.gov/dataset/supply-chain-greenhouse-gas-emission-factors-v1-3-by-naics-6) | kg CO2e per 2022 USD, by 2017 NAICS-6 commodity code (v1.3.0) — feeds the emissions layer below |
 
+The [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
+is licensed **CC BY-NC-SA 4.0** (Attribution-NonCommercial-ShareAlike). Everywhere
+this project or its deployments show Olist-derived figures — including the
+gold-layer snapshot committed at `data/demo/gold_snapshot.duckdb` for the
+Streamlit Community Cloud deployment — the data is aggregated (gold-layer KPIs,
+not raw order/customer rows) and used for non-commercial, educational purposes
+only, per that license.
+
 ## Architecture
 
 ```
@@ -65,14 +73,21 @@ a repository secret — see `DECISIONS.md`, Phase 7, decision #8), so there's no
 automated regression protection if the model ID is retired again or the prompt
 drifts; manual verification is what's backing the "it works" claim here, not CI.
 
-On Streamlit Community Cloud, `streamlit_app.py` bootstraps a synthetic database via
-`data/sample_data.py` instead of running dbt (Cloud can't run the real Kaggle-CSV
-pipeline) — see `DECISIONS.md` for why that duplication exists, and Phase 6 for why
-that means the *public* Cloud dashboard does not actually receive the Comtrade
-pipeline's output at all (it shows a static synthetic example instead) — only a
-self-hosted deployment sharing the same DuckDB file as the Comtrade pipeline does,
-and only after that pipeline is actually run (manually, by default — see
-Orchestration below for what it would take to put it on an actual schedule).
+On Streamlit Community Cloud, `streamlit_app.py` serves the committed gold-layer
+snapshot (`data/demo/gold_snapshot.duckdb` — 14 gold tables, ~4MB, no bronze/silver,
+no raw Olist rows) instead of running dbt (Cloud can't run the real Kaggle-CSV
+pipeline). This is real pipeline output — actual supplier counts, actual emissions
+estimates — just a point-in-time snapshot rather than connected to a live backend;
+re-running `scripts/export_to_s3.py`-style logic to regenerate and commit a fresh
+`gold_snapshot.duckdb` is a manual step, not automatic. If that file is ever
+missing, `streamlit_app.py` falls back to a fully synthetic database
+(`data/sample_data.py`) instead, and the dashboard shows an explicit "Demo mode"
+banner whenever that fallback is in use — never silently. Either way, the *public*
+Cloud dashboard does not receive the Comtrade pipeline's live output (its
+trade-concentration figures are whatever was baked into the snapshot at export
+time) — only a self-hosted deployment sharing the same DuckDB file as the Comtrade
+pipeline does, and only after that pipeline is actually run (manually, by default —
+see Orchestration below for what it would take to put it on an actual schedule).
 
 ## Emissions Layer
 
