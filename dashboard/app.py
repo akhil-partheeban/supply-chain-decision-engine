@@ -552,30 +552,29 @@ with tab_risk:
     # running separately (see README) and ANTHROPIC_API_KEY set in its environment —
     # this widget cannot import and call the agent in-process, since the dashboard and
     # API are two separate deployable services (see docker-compose.yml / aws/ / gcp/).
+    #
+    # API_BASE_URL defaults to localhost:8000, meaningless on Streamlit Cloud (no
+    # FastAPI backend runs inside that process) unless explicitly set to a real
+    # deployed API via a Cloud secret — see README.md for the exact secret. Whether
+    # that's configured or not, the section is gated on an actual reachability
+    # probe rather than inferring it from DEMO_MODE/DB_PATH — a dead text box (or
+    # even an explanatory message in its place) is worse than the section not
+    # appearing at all when it can't work.
 
-    st.markdown(
-        '<div class="section-header">AI Decision Assistant</div>',
-        unsafe_allow_html=True,
-    )
+    API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
-    # No FastAPI backend runs inside the Streamlit Cloud process, so this widget
-    # can only work there if API_BASE_URL is explicitly set to a real deployed API
-    # (a Cloud secret/env var override) — not its localhost:8000 default, which is
-    # meaningless on Cloud. DB_PATH ending in the committed snapshot, or DEMO_MODE,
-    # both mean "not a real local/Docker dev environment" — hide the widget there
-    # instead of showing a text box that will always fail with a connection error.
-    _api_explicitly_configured = "API_BASE_URL" in os.environ
-    _running_off_snapshot_or_demo = DEMO_MODE or DB_PATH.endswith("gold_snapshot.duckdb")
+    @st.cache_data(ttl=300)
+    def _api_reachable(base_url: str) -> bool:
+        try:
+            return requests.get(f"{base_url}/health", timeout=5).status_code == 200
+        except requests.exceptions.RequestException:
+            return False
 
-    if _running_off_snapshot_or_demo and not _api_explicitly_configured:
-        st.info(
-            "AI Decision Assistant isn't available in this deployment — it needs a "
-            "live FastAPI backend (`API_BASE_URL`), which isn't running alongside "
-            "this snapshot/demo dashboard. Run the full stack locally to use it — "
-            "see README.md Quickstart."
+    if _api_reachable(API_BASE_URL):
+        st.markdown(
+            '<div class="section-header">AI Decision Assistant</div>',
+            unsafe_allow_html=True,
         )
-    else:
-        API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
         question = st.text_input(
             label="Ask a supply chain question",
@@ -593,6 +592,9 @@ with tab_risk:
                     resp.raise_for_status()
                     result = resp.json()
                 except requests.exceptions.RequestException as exc:
+                    # The /health probe above passed, so this is a transient
+                    # failure during actual use (rate limit, timeout, etc.) — worth
+                    # surfacing here, unlike an a-priori-dead widget.
                     result = None
                     st.error(
                         f"⚠️ Could not reach the decision agent at `{API_BASE_URL}` — "

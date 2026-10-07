@@ -5,6 +5,7 @@ Uses the Anthropic SDK directly with a manual tool loop.
 ask(question) → {"answer": str, "sql_used": list[str], "action_items": list[str]}
 """
 
+import asyncio
 import json
 import os
 
@@ -16,6 +17,20 @@ load_dotenv()
 
 DB_PATH = os.getenv("DUCKDB_PATH", "data/duckdb/supply_chain.duckdb")
 MODEL = "claude-sonnet-5"
+
+# Cost/abuse guards for a public, unauthenticated endpoint (/decisions/ask has no
+# auth — see api/routers/decisions.py). Real usage in this project has never needed
+# more than 1-2 tool-calling turns; MAX_TURNS bounds a single request to a small,
+# fixed number of Anthropic API calls regardless of what a caller asks or how the
+# model behaves. ANTHROPIC_TIMEOUT_SECONDS bounds each individual call so a slow or
+# hung request can't tie one up indefinitely.
+MAX_TURNS = 6
+ANTHROPIC_TIMEOUT_SECONDS = 30
+# Below the dashboard's own 60s client-side request timeout (dashboard/app.py) on
+# purpose — if this fires first, the server returns a clean response instead of the
+# client giving up while the agent (and its Anthropic API spend) keeps running
+# unseen in the background.
+REQUEST_TIMEOUT_SECONDS = 55
 
 SYSTEM_PROMPT = """You are a supply chain analyst assistant with access to a DuckDB database
 containing Olist e-commerce data.
@@ -132,7 +147,7 @@ def _extract_action_items(answer: str) -> list[str]:
         return items[:4]
 
     # Fallback: ask Claude to extract them
-    client = anthropic.Anthropic()
+    client = anthropic.Anthropic(timeout=ANTHROPIC_TIMEOUT_SECONDS)
     resp = client.messages.create(
         model=MODEL,
         max_tokens=512,
@@ -161,11 +176,12 @@ def ask(question: str) -> dict:
             "action_items": list[str],
         }
     """
-    client = anthropic.Anthropic()
+    client = anthropic.Anthropic(timeout=ANTHROPIC_TIMEOUT_SECONDS)
     messages = [{"role": "user", "content": question}]
     sql_used: list[str] = []
+    hit_turn_limit = False
 
-    while True:
+    for turn in range(MAX_TURNS):
         response = client.messages.create(
             model=MODEL,
             max_tokens=4096,
@@ -194,6 +210,8 @@ def ask(question: str) -> dict:
                     "content": result,
                 })
             messages.append({"role": "user", "content": tool_results})
+            if turn == MAX_TURNS - 1:
+                hit_turn_limit = True
         else:
             break  # unexpected stop_reason — bail out
 
@@ -202,7 +220,17 @@ def ask(question: str) -> dict:
         (block.text for block in response.content if hasattr(block, "text")),
         "",
     )
-    action_items = _extract_action_items(answer)
+    if hit_turn_limit and not answer:
+        # Don't run _extract_action_items' fallback here — it makes another
+        # Claude API call to extract action items from text, which would burn an
+        # extra call on exactly the kind of request MAX_TURNS exists to cap.
+        answer = (
+            f"This question needed more than {MAX_TURNS} tool-calling turns to "
+            f"answer, which exceeds this endpoint's cap. Try a narrower question."
+        )
+        action_items = ["Narrow the question and try again."]
+    else:
+        action_items = _extract_action_items(answer)
 
     return {
         "answer": answer,
@@ -217,8 +245,28 @@ async def run_decision_agent(question: str, context: dict | None = None) -> dict
     """Returns the full {"answer", "sql_used", "action_items"} dict from ask() —
     this used to discard everything except "answer", which meant action_items (the
     whole point of the ACTION: extraction in _extract_action_items) never reached
-    the API response or the dashboard. See DECISIONS.md, Phase 4."""
+    the API response or the dashboard. See DECISIONS.md, Phase 4.
+
+    ask() is synchronous and blocking (duckdb + the Anthropic SDK are both sync);
+    running it directly in this async function would block the whole event loop for
+    the entire tool-calling loop, including every other concurrent request this
+    single-instance API is serving. asyncio.to_thread offloads it to a worker
+    thread so asyncio.wait_for's timeout is actually enforceable — wrapping a
+    blocking call in wait_for without to_thread would not have interrupted it.
+    """
     full_input = question
     if context:
         full_input += f"\n\nAdditional context: {context}"
-    return ask(full_input)
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(ask, full_input), timeout=REQUEST_TIMEOUT_SECONDS
+        )
+    except asyncio.TimeoutError:
+        return {
+            "answer": (
+                f"This request exceeded the {REQUEST_TIMEOUT_SECONDS}s timeout. "
+                f"Try a narrower question."
+            ),
+            "sql_used": [],
+            "action_items": ["Try a narrower question."],
+        }
