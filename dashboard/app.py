@@ -30,25 +30,25 @@ st.markdown(
     <style>
     .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
     .metric-card {
-        background: #f8f9fb;
-        border: 1px solid #e2e8f0;
+        background: #161b22;
+        border: 1px solid #30363d;
         border-radius: 10px;
         padding: 1rem 1.25rem;
         text-align: center;
     }
-    .metric-label { font-size: 0.78rem; color: #64748b; font-weight: 600;
+    .metric-label { font-size: 0.78rem; color: #8b949e; font-weight: 600;
                     letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 4px; }
-    .metric-value { font-size: 1.85rem; font-weight: 700; color: #1e293b; }
-    .metric-value.warn { color: #d97706; }
-    .metric-value.danger { color: #dc2626; }
+    .metric-value { font-size: 1.85rem; font-weight: 700; color: #e6edf3; }
+    .metric-value.warn { color: #fbbf24; }
+    .metric-value.danger { color: #f87171; }
     .section-header {
-        font-size: 1.1rem; font-weight: 700; color: #1e293b;
+        font-size: 1.1rem; font-weight: 700; color: #e6edf3;
         border-left: 4px solid #3b82f6; padding-left: 0.6rem;
         margin: 1.5rem 0 0.75rem;
     }
     .placeholder-box {
-        background: #f1f5f9; border: 1px dashed #94a3b8;
-        border-radius: 8px; padding: 1rem 1.25rem; color: #64748b;
+        background: #161b22; border: 1px dashed #30363d;
+        border-radius: 8px; padding: 1rem 1.25rem; color: #8b949e;
         font-size: 0.9rem;
     }
     </style>
@@ -69,6 +69,36 @@ def q(sql: str) -> pd.DataFrame:
     except Exception as exc:
         st.error(f"Query error: {exc}")
         return pd.DataFrame()
+
+
+# ── Shared chart theme (dark) ───────────────────────────────────────────────────
+# One HIGH/MEDIUM/LOW risk-tier palette, referenced by every chart/table that
+# shows a risk tier (Supplier Risk table, Sourcing Cost Drivers' freight_burden_tier)
+# so "HIGH" always means the same color everywhere, not just a coincidentally
+# similar one. Also the base hues the Emissions quadrant scatter builds on.
+RISK_TIER_COLORS = {"HIGH": "#ef4444", "MEDIUM": "#f59e0b", "LOW": "#60a5fa"}
+# Same hues as RISK_TIER_COLORS, low-opacity, for table ROW backgrounds — a solid
+# fill would be illegible with text on top; a subtle tint of the same color keeps
+# the tier instantly recognizable without fighting the row's own light text.
+RISK_TIER_ROW_TINTS = {
+    "HIGH": "rgba(239, 68, 68, 0.22)",
+    "MEDIUM": "rgba(245, 158, 11, 0.20)",
+    "LOW": "rgba(96, 165, 250, 0.16)",
+}
+
+# Plotly chart chrome for the dark theme: transparent backgrounds (so the figure
+# always matches the actual Streamlit theme rather than a second hardcoded color
+# that could drift from .streamlit/config.toml), light text, and a gridline subtle
+# enough not to compete with the dark panel background behind it.
+CHART_BG = "rgba(0,0,0,0)"
+CHART_FONT_COLOR = "#e6edf3"
+CHART_GRIDCOLOR = "rgba(255,255,255,0.08)"
+CHART_FONT = dict(family="sans-serif", size=12, color=CHART_FONT_COLOR)
+# Plotly's built-in "OrRd" sequential scale ends in a dark maroon that loses
+# contrast against a near-black plot background — this custom scale (pale gold ->
+# orange -> red) stays vivid at both ends so the highest-intensity bars remain
+# clearly visible, not just the lowest ones.
+HOTSPOT_COLORSCALE = [[0, "#fde68a"], [0.5, "#fb923c"], [1, RISK_TIER_COLORS["HIGH"]]]
 
 
 # ── Header ─────────────────────────────────────────────────────────────────────
@@ -180,11 +210,9 @@ with tab_risk:
             if selected != "All":
                 risk_df = risk_df[risk_df["risk_tier"] == selected]
 
-            TIER_COLORS = {"HIGH": "#fee2e2", "MEDIUM": "#fef9c3", "LOW": "#dcfce7"}
-
             def _color_row(row):
-                bg = TIER_COLORS.get(row["risk_tier"], "white")
-                return [f"background-color: {bg}; color: #1e293b" for _ in row]
+                bg = RISK_TIER_ROW_TINTS.get(row["risk_tier"], "transparent")
+                return [f"background-color: {bg}; color: {CHART_FONT_COLOR}" for _ in row]
 
             styled = (
                 risk_df.style
@@ -236,7 +264,7 @@ with tab_risk:
 
         if not conc_df.empty:
             colors = [
-                "#ef4444" if f == "HIGH" else "#60a5fa"
+                RISK_TIER_COLORS["HIGH"] if f == "HIGH" else RISK_TIER_COLORS["LOW"]
                 for f in conc_df["concentration_flag"]
             ]
 
@@ -252,23 +280,23 @@ with tab_risk:
             fig.add_hline(
                 y=20,
                 line_dash="dot",
-                line_color="#dc2626",
+                line_color="#f87171",
                 annotation_text="HIGH threshold (20%)",
                 annotation_position="top right",
-                annotation_font_color="#dc2626",
+                annotation_font_color="#f87171",
                 annotation_font_size=11,
             )
 
             fig.update_layout(
                 xaxis_title="Seller State",
                 yaxis_title="% of Total Revenue",
-                plot_bgcolor="white",
-                paper_bgcolor="white",
+                plot_bgcolor=CHART_BG,
+                paper_bgcolor=CHART_BG,
                 margin=dict(t=20, b=40, l=40, r=20),
                 height=290,
-                font=dict(family="sans-serif", size=12),
+                font=CHART_FONT,
                 xaxis=dict(tickangle=-45, showgrid=False),
-                yaxis=dict(showgrid=True, gridcolor="#f1f5f9"),
+                yaxis=dict(showgrid=True, gridcolor=CHART_GRIDCOLOR),
                 showlegend=False,
             )
 
@@ -358,7 +386,7 @@ with tab_risk:
 
         if not cost_df.empty:
             colors = [
-                "#ef4444" if t == "HIGH" else "#f59e0b" if t == "MEDIUM" else "#60a5fa"
+                RISK_TIER_COLORS.get(t, RISK_TIER_COLORS["LOW"])
                 for t in cost_df["freight_burden_tier"]
             ]
             fig2 = go.Figure(go.Bar(
@@ -373,13 +401,13 @@ with tab_risk:
             fig2.update_layout(
                 xaxis_title="Freight as % of Category Spend",
                 yaxis_title=None,
-                plot_bgcolor="white",
-                paper_bgcolor="white",
+                plot_bgcolor=CHART_BG,
+                paper_bgcolor=CHART_BG,
                 margin=dict(t=20, b=40, l=10, r=20),
                 height=340,
-                font=dict(family="sans-serif", size=12),
+                font=CHART_FONT,
                 yaxis=dict(autorange="reversed", showgrid=False),
-                xaxis=dict(showgrid=True, gridcolor="#f1f5f9"),
+                xaxis=dict(showgrid=True, gridcolor=CHART_GRIDCOLOR),
                 showlegend=False,
             )
             st.plotly_chart(fig2, use_container_width=True)
@@ -467,7 +495,7 @@ with tab_risk:
                     x=top_partners["partner_share_pct"],
                     y=top_partners["partner_name"],
                     orientation="h",
-                    marker_color="#60a5fa",
+                    marker_color=RISK_TIER_COLORS["LOW"],
                     text=top_partners["partner_share_pct"].apply(lambda v: f"{v:.1f}%"),
                     textposition="outside",
                     hovertemplate="<b>%{y}</b><br>Share: %{x:.1f}%<extra></extra>",
@@ -475,12 +503,12 @@ with tab_risk:
                 fig3.update_layout(
                     xaxis_title="Share of import value (%)",
                     yaxis_title=None,
-                    plot_bgcolor="white", paper_bgcolor="white",
+                    plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG,
                     margin={"t": 10, "b": 40, "l": 10, "r": 20},
                     height=320,
-                    font={"family": "sans-serif", "size": 12},
+                    font=CHART_FONT,
                     yaxis={"autorange": "reversed", "showgrid": False},
-                    xaxis={"showgrid": True, "gridcolor": "#f1f5f9"},
+                    xaxis={"showgrid": True, "gridcolor": CHART_GRIDCOLOR},
                     showlegend=False,
                 )
                 st.plotly_chart(fig3, use_container_width=True)
@@ -502,18 +530,20 @@ with tab_risk:
                     marker={"size": 8},
                     hovertemplate="Period %{x}<br>HHI: %{y:.0f}<extra></extra>",
                 ))
-                fig4.add_hline(y=2500, line_dash="dot", line_color="#dc2626",
-                                annotation_text="Highly concentrated (2500)", annotation_font_size=10)
-                fig4.add_hline(y=1500, line_dash="dot", line_color="#d97706",
-                                annotation_text="Moderately concentrated (1500)", annotation_font_size=10)
+                fig4.add_hline(y=2500, line_dash="dot", line_color="#f87171",
+                                annotation_text="Highly concentrated (2500)", annotation_font_size=10,
+                                annotation_font_color=CHART_FONT_COLOR)
+                fig4.add_hline(y=1500, line_dash="dot", line_color="#fbbf24",
+                                annotation_text="Moderately concentrated (1500)", annotation_font_size=10,
+                                annotation_font_color=CHART_FONT_COLOR)
                 fig4.update_layout(
                     xaxis_title="Period", yaxis_title="HHI",
-                    plot_bgcolor="white", paper_bgcolor="white",
+                    plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG,
                     margin={"t": 10, "b": 40, "l": 40, "r": 20},
                     height=320,
-                    font={"family": "sans-serif", "size": 12},
+                    font=CHART_FONT,
                     xaxis={"showgrid": False, "type": "category"},
-                    yaxis={"showgrid": True, "gridcolor": "#f1f5f9"},
+                    yaxis={"showgrid": True, "gridcolor": CHART_GRIDCOLOR},
                     showlegend=False,
                 )
                 st.plotly_chart(fig4, use_container_width=True)
@@ -661,9 +691,9 @@ with tab_emissions:
 
         QUADRANT_COLORS = {
             "Low Risk / Low Emissions": "#22c55e",
-            "Low Risk / High Emissions": "#f59e0b",
-            "High Risk / Low Emissions": "#60a5fa",
-            "High Risk / High Emissions": "#ef4444",
+            "Low Risk / High Emissions": RISK_TIER_COLORS["MEDIUM"],
+            "High Risk / Low Emissions": RISK_TIER_COLORS["LOW"],
+            "High Risk / High Emissions": RISK_TIER_COLORS["HIGH"],
         }
 
         if color_by == "Quadrant":
@@ -681,14 +711,15 @@ with tab_emissions:
                 labels={"reliability_score": "Reliability Score", "emissions_intensity": "Emissions Intensity (kg CO2e/USD)"},
             )
 
-        fig5.add_vline(x=scatter_df["reliability_score"].median(), line_dash="dot", line_color="#94a3b8")
-        fig5.add_hline(y=scatter_df["emissions_intensity"].median(), line_dash="dot", line_color="#94a3b8")
+        fig5.add_vline(x=scatter_df["reliability_score"].median(), line_dash="dot", line_color="#8b949e")
+        fig5.add_hline(y=scatter_df["emissions_intensity"].median(), line_dash="dot", line_color="#8b949e")
         fig5.update_layout(
-            plot_bgcolor="white", paper_bgcolor="white",
+            plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG,
             height=460, margin=dict(t=20, b=40, l=40, r=20),
-            font=dict(family="sans-serif", size=12),
-            xaxis=dict(showgrid=True, gridcolor="#f1f5f9"),
-            yaxis=dict(showgrid=True, gridcolor="#f1f5f9"),
+            font=CHART_FONT,
+            legend=dict(font=CHART_FONT),
+            xaxis=dict(showgrid=True, gridcolor=CHART_GRIDCOLOR),
+            yaxis=dict(showgrid=True, gridcolor=CHART_GRIDCOLOR),
         )
         st.plotly_chart(fig5, use_container_width=True)
         st.caption(
@@ -740,8 +771,11 @@ with tab_emissions:
             orientation="h",
             marker=dict(
                 color=hotspot_df["category_emissions_intensity"],
-                colorscale="OrRd",
-                colorbar=dict(title="Intensity<br>(kg CO2e/USD)"),
+                colorscale=HOTSPOT_COLORSCALE,
+                colorbar=dict(
+                    title=dict(text="Intensity<br>(kg CO2e/USD)", font=dict(color=CHART_FONT_COLOR)),
+                    tickfont=dict(color=CHART_FONT_COLOR),
+                ),
             ),
             text=hotspot_df["pct_of_portfolio_emissions"].apply(lambda v: f"{v:.1f}%"),
             textposition="outside",
@@ -753,12 +787,12 @@ with tab_emissions:
         fig6.update_layout(
             xaxis_title="Total Estimated kg CO2e",
             yaxis_title=None,
-            plot_bgcolor="white", paper_bgcolor="white",
+            plot_bgcolor=CHART_BG, paper_bgcolor=CHART_BG,
             margin=dict(t=20, b=40, l=10, r=20),
             height=460,
-            font=dict(family="sans-serif", size=12),
+            font=CHART_FONT,
             yaxis=dict(autorange="reversed", showgrid=False),
-            xaxis=dict(showgrid=True, gridcolor="#f1f5f9"),
+            xaxis=dict(showgrid=True, gridcolor=CHART_GRIDCOLOR),
             showlegend=False,
         )
         st.plotly_chart(fig6, use_container_width=True)
