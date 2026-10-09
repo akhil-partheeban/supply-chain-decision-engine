@@ -112,10 +112,17 @@ if DEMO_MODE:
     )
 
 st.markdown("## 🚚 Supply Chain Decision Engine")
-st.caption(
-    "Batch, refreshed manually · DuckDB gold layer" if DEMO_MODE
-    else "Batch, refreshed manually · Olist dataset · DuckDB gold layer"
-)
+st.caption("Supplier risk and spend-based Scope 3 emissions analytics (EPA emission factors, dbt + DuckDB)")
+if not DEMO_MODE:
+    # Only shown when the data is genuinely Olist-derived (real local DB or the
+    # committed gold snapshot) — in true DEMO_MODE (synthetic fallback), the
+    # warning banner above already states plainly that this isn't real Olist
+    # data, so claiming "Demo data: ... Olist marketplace dataset" here too
+    # would be inaccurate for that specific case.
+    st.markdown(
+        "<small style='color:#94a3b8'>Demo data: public Olist marketplace dataset (Brazil).</small>",
+        unsafe_allow_html=True,
+    )
 st.divider()
 
 tab_risk, tab_emissions = st.tabs(["Risk & Concentration", "Emissions"])
@@ -232,7 +239,7 @@ with tab_risk:
                 height=460,
                 column_config={
                     "seller_id":            st.column_config.TextColumn("Seller ID",       width="medium"),
-                    "seller_state":         st.column_config.TextColumn("State",           width="small"),
+                    "seller_state":         st.column_config.TextColumn("Region",          width="small"),
                     "risk_tier":            st.column_config.TextColumn("Risk Tier",       width="small"),
                     "reliability_score":    st.column_config.TextColumn("Reliability",     width="small"),
                     "total_orders":         st.column_config.NumberColumn("Orders",        width="small"),
@@ -250,7 +257,7 @@ with tab_risk:
 
     with right:
         st.markdown(
-            '<div class="section-header">Concentration Risk by State</div>',
+            '<div class="section-header">Concentration Risk by Region</div>',
             unsafe_allow_html=True,
         )
 
@@ -288,7 +295,7 @@ with tab_risk:
             )
 
             fig.update_layout(
-                xaxis_title="Seller State",
+                xaxis_title="Region",
                 yaxis_title="% of Total Revenue",
                 plot_bgcolor=CHART_BG,
                 paper_bgcolor=CHART_BG,
@@ -310,10 +317,10 @@ with tab_risk:
                     f"for >20% of total revenue."
                 )
 
-            with st.expander("Full state breakdown"):
+            with st.expander("Full region breakdown"):
                 st.dataframe(
                     conc_df.rename(columns={
-                        "seller_state":       "State",
+                        "seller_state":       "Region",
                         "total_sellers":      "Sellers",
                         "total_revenue":      "Revenue",
                         "pct":                "Revenue Share %",
@@ -353,7 +360,7 @@ with tab_risk:
             st.dataframe(
                 top_suppliers.rename(columns={
                     "seller_id":            "Seller ID",
-                    "seller_state":         "State",
+                    "seller_state":         "Region",
                     "total_revenue":        "Revenue",
                     "revenue_share_pct":    "Share %",
                     "cumulative_share_pct": "Cumulative %",
@@ -801,6 +808,10 @@ with tab_emissions:
             "volume contribution; color = that category's own emissions "
             "intensity (its EPA factor). A long, dark bar is a hotspot on both "
             "counts; a long, light bar is a hotspot from spend volume alone."
+        )
+        st.caption(
+            "Spend-based estimate. US EPA factors applied to Brazilian "
+            "marketplace spend, so values are illustrative."
         )
 
         with st.expander("Full category breakdown"):
